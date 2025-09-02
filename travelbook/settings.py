@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'drf_spectacular',
     
     # Local apps
     'authentication',
@@ -170,6 +171,22 @@ REST_FRAMEWORK = {
     ],
     'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%S.%fZ',
     'DATE_FORMAT': '%Y-%m-%d',
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'TravelBook API',
+    'DESCRIPTION': 'API documentation for TravelBook travel management system',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+    },
 }
 
 # JWT Settings
