@@ -56,8 +56,8 @@ htmlcov/
 *.db
 *.sqlite3
 
-# Migrations (keep structure but not files)
-*/migrations/*.py
+# Keep __init__.py files in migrations directories
+# Migration files should be committed to version control
 !*/migrations/__init__.py
 
 # Celery
