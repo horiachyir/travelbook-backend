@@ -16,9 +16,19 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 # Get ALLOWED_HOSTS from environment variable or use defaults
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# Always include Render domain if not already present
-if 'travelbook-backend.onrender.com' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('travelbook-backend.onrender.com')
+# Always include Render domains
+render_domains = [
+    'travelbook-backend.onrender.com',
+    '.onrender.com',  # Wildcard for any onrender.com subdomain
+    '.travelbook-backend.onrender.com'  # Wildcard for any subdomain
+]
+
+for domain in render_domains:
+    if domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(domain)
+
+# Strip any whitespace from hosts
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 
 # Application definition
 INSTALLED_APPS = [
