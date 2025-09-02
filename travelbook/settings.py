@@ -13,7 +13,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
 DEBUG = config('DEBUG', default=True, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,travelbook-backend.onrender.com').split(',')
+# Get ALLOWED_HOSTS from environment variable or use defaults
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+
+# Always include Render domain if not already present
+if 'travelbook-backend.onrender.com' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('travelbook-backend.onrender.com')
 
 # Application definition
 INSTALLED_APPS = [
