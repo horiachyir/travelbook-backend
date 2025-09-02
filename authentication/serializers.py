@@ -7,20 +7,34 @@ User = get_user_model()
 
 class SignUpSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
-    confirm_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True, required=False)
+    fullName = serializers.CharField(source='full_name', max_length=255)
     
     class Meta:
         model = User
-        fields = ('email', 'full_name', 'password', 'confirm_password', 'phone', 'company')
+        fields = ('email', 'fullName', 'password', 'confirm_password', 'phone', 'company')
+        extra_kwargs = {
+            'phone': {'required': False},
+            'company': {'required': False}
+        }
     
     def validate(self, attrs):
-        if attrs['password'] != attrs['confirm_password']:
+        # Check if confirm_password is provided and validate it
+        confirm_password = attrs.pop('confirm_password', None)
+        if confirm_password and attrs.get('password') != confirm_password:
             raise serializers.ValidationError("Passwords don't match")
         return attrs
     
     def create(self, validated_data):
-        validated_data.pop('confirm_password')
-        user = User.objects.create_user(**validated_data)
+        # Extract password and create user
+        password = validated_data.pop('password')
+        user = User.objects.create_user(
+            email=validated_data['email'],
+            full_name=validated_data['full_name'],
+            password=password,
+            phone=validated_data.get('phone'),
+            company=validated_data.get('company')
+        )
         return user
 
 
@@ -44,11 +58,15 @@ class SignInSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    fullName = serializers.CharField(source='full_name', read_only=True)
+    isVerified = serializers.BooleanField(source='is_verified', read_only=True)
+    dateJoined = serializers.DateTimeField(source='date_joined', read_only=True)
+    
     class Meta:
         model = User
-        fields = ('id', 'email', 'full_name', 'phone', 'company', 'is_verified', 
-                  'date_joined', 'avatar', 'bio', 'language', 'timezone')
-        read_only_fields = ('id', 'email', 'date_joined', 'is_verified')
+        fields = ('id', 'email', 'fullName', 'phone', 'company', 'isVerified', 
+                  'dateJoined', 'avatar', 'bio', 'language', 'timezone')
+        read_only_fields = ('id', 'email', 'dateJoined', 'isVerified')
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
