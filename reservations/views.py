@@ -17,15 +17,16 @@ def create_booking(request):
     """
     Handle booking operations:
     
-    GET /api/booking/ - Retrieve all bookings with comprehensive data from all related tables:
-    - Booking information
+    GET /api/booking/ - Retrieve bookings created by the current authenticated user with comprehensive data from all related tables:
+    - Booking information (filtered by current user)
     - Customer details (name, email, phone, country, etc.)
     - Tour details (multiple tours per booking)
     - Pricing breakdown (detailed cost breakdown)  
     - Payment details (method, status, amounts)
-    - Statistics (total bookings, customers, tours, revenue)
+    - Statistics (total bookings, customers, tours, revenue for current user only)
     
     POST /api/booking/ - Create a new booking with multiple tours, customer info, and payment details.
+    The created booking will be associated with the current authenticated user.
     Expected data structure matches the provided JSON format with:
     - customer: customer information
     - tours: list of tours in the booking
@@ -36,10 +37,10 @@ def create_booking(request):
     """
     if request.method == 'GET':
         try:
-            # Get all bookings with related data
+            # Get bookings created by the current authenticated user only
             bookings = Booking.objects.select_related('customer', 'payment_details', 'created_by').prefetch_related(
                 'booking_tours', 'pricing_breakdown'
-            ).all().order_by('-created_at')
+            ).filter(created_by=request.user).order_by('-created_at')
             
             booking_data = []
             
@@ -180,10 +181,10 @@ def create_booking(request):
                 
                 booking_data.append(booking_item)
             
-            # Additional statistics
-            total_bookings = Booking.objects.count()
-            total_customers = Booking.objects.values('customer').distinct().count()
-            total_tours = BookingTour.objects.count()
+            # Additional statistics (filtered by current user)
+            total_bookings = Booking.objects.filter(created_by=request.user).count()
+            total_customers = Booking.objects.filter(created_by=request.user).values('customer').distinct().count()
+            total_tours = BookingTour.objects.filter(created_by=request.user).count()
             total_revenue = sum(booking.total_amount for booking in bookings)
             
             return Response({

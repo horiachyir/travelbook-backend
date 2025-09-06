@@ -2,20 +2,27 @@
 
 ## GET /api/booking/
 
-Retrieves comprehensive booking data from all related database tables.
+Retrieves comprehensive booking data from all related database tables, filtered to show only bookings created by the currently authenticated user.
 
 ### Authentication Required
 - **Header**: `Authorization: Bearer <JWT_TOKEN>`
 
 ### Database Tables Queried
 
-The endpoint retrieves data from the following 5 database tables:
+The endpoint retrieves data from the following 5 database tables, filtered by the current user:
 
-1. **`bookings`** - Main booking information
-2. **`customers`** - Customer details
-3. **`booking_tours`** - Individual tours within bookings
-4. **`booking_pricing_breakdown`** - Detailed pricing breakdown
-5. **`booking_payments`** - Payment information
+1. **`bookings`** - Main booking information (WHERE created_by = current_user)
+2. **`customers`** - Customer details (for user's bookings only)
+3. **`booking_tours`** - Individual tours within bookings (WHERE created_by = current_user)
+4. **`booking_pricing_breakdown`** - Detailed pricing breakdown (WHERE created_by = current_user)
+5. **`booking_payments`** - Payment information (WHERE created_by = current_user)
+
+### Data Isolation & Security
+
+- ✅ **User Isolation**: Each user only sees bookings they created
+- ✅ **No Data Leakage**: Complete isolation between user accounts  
+- ✅ **Statistics Filtering**: All statistics reflect only the current user's data
+- ✅ **Secure Access**: JWT authentication required for all requests
 
 ### Response Structure
 
