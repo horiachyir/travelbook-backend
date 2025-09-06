@@ -24,11 +24,11 @@ class BookingPaymentInline(admin.StackedInline):
 class BookingAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'customer', 'destination', 'start_date', 'status', 
-        'total_amount', 'currency', 'created_at'
+        'total_amount', 'currency', 'created_by', 'created_at'
     ]
-    list_filter = ['status', 'lead_source', 'currency', 'created_at']
-    search_fields = ['customer__name', 'customer__email', 'destination', 'assigned_to']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_filter = ['status', 'lead_source', 'currency', 'created_by', 'created_at']
+    search_fields = ['customer__name', 'customer__email', 'destination', 'assigned_to', 'created_by__email']
+    readonly_fields = ['id', 'created_by', 'created_at', 'updated_at']
     inlines = [BookingTourInline, BookingPricingBreakdownInline, BookingPaymentInline]
     
     fieldsets = (
@@ -55,8 +55,8 @@ class BookingAdmin(admin.ModelAdmin):
             'fields': ('include_payment', 'copy_comments', 'send_purchase_order', 
                       'send_quotation_access')
         }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
+        ('User & Timestamps', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
@@ -66,22 +66,22 @@ class BookingAdmin(admin.ModelAdmin):
 class BookingTourAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'booking', 'tour_name', 'date', 'adult_pax', 
-        'child_pax', 'subtotal', 'operator'
+        'child_pax', 'subtotal', 'operator', 'created_by'
     ]
-    list_filter = ['operator', 'date']
-    search_fields = ['tour_name', 'tour_code', 'booking__customer__name']
-    readonly_fields = ['created_at', 'updated_at']
+    list_filter = ['operator', 'date', 'created_by']
+    search_fields = ['tour_name', 'tour_code', 'booking__customer__name', 'created_by__email']
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
 
 
 @admin.register(BookingPayment)
 class BookingPaymentAdmin(admin.ModelAdmin):
     list_display = [
         'booking', 'date', 'method', 'amount_paid', 
-        'percentage', 'status'
+        'percentage', 'status', 'created_by'
     ]
-    list_filter = ['method', 'status', 'date']
-    search_fields = ['booking__customer__name', 'booking__id']
-    readonly_fields = ['created_at', 'updated_at']
+    list_filter = ['method', 'status', 'date', 'created_by']
+    search_fields = ['booking__customer__name', 'booking__id', 'created_by__email']
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
 
 
 # Keep the original Reservation admin if it exists

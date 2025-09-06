@@ -70,7 +70,8 @@ class Booking(models.Model):
     send_purchase_order = models.BooleanField(default=True)
     send_quotation_access = models.BooleanField(default=True)
     
-    # Timestamps
+    # Timestamps and user tracking
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_bookings')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -115,6 +116,8 @@ class BookingTour(models.Model):
     operator = models.CharField(max_length=100, choices=OPERATOR_CHOICES)
     comments = models.TextField(blank=True)
     
+    # User tracking
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_tours')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -134,6 +137,8 @@ class BookingPricingBreakdown(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
     
+    # User tracking
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_pricing_breakdowns')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -173,6 +178,8 @@ class BookingPayment(models.Model):
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     receipt_file = models.FileField(upload_to='receipts/', blank=True, null=True)
     
+    # User tracking
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_payments')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

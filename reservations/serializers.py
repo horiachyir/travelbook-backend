@@ -129,6 +129,8 @@ class BookingSerializer(serializers.Serializer):
             'send_quotation_access': validated_data.get('sendQuotationAccess', True),
         }
         
+        # Add the authenticated user to booking data
+        booking_data['created_by'] = self.context['request'].user
         booking = Booking.objects.create(**booking_data)
         
         # Create booking tours
@@ -150,7 +152,8 @@ class BookingSerializer(serializers.Serializer):
                 infant_price=tour_data['infantPrice'],
                 subtotal=tour_data['subtotal'],
                 operator=tour_data['operator'],
-                comments=tour_data.get('comments', '')
+                comments=tour_data.get('comments', ''),
+                created_by=self.context['request'].user
             )
         
         # Create pricing breakdown
@@ -160,7 +163,8 @@ class BookingSerializer(serializers.Serializer):
                 item=breakdown_item['item'],
                 quantity=breakdown_item['quantity'],
                 unit_price=breakdown_item['unitPrice'],
-                total=breakdown_item['total']
+                total=breakdown_item['total'],
+                created_by=self.context['request'].user
             )
         
         # Create payment details if provided
@@ -173,7 +177,8 @@ class BookingSerializer(serializers.Serializer):
                 amount_paid=payment_details_data['amountPaid'],
                 comments=payment_details_data.get('comments', ''),
                 status=payment_details_data.get('status', 'pending'),
-                receipt_file=payment_details_data.get('receiptFile')
+                receipt_file=payment_details_data.get('receiptFile'),
+                created_by=self.context['request'].user
             )
         
         return booking

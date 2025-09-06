@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from .models import Booking, BookingTour, BookingPayment, BookingPricingBreakdown
 from .serializers import BookingSerializer
 from django.db import transaction
+from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,8 +15,17 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def create_booking(request):
     """
-    Create a new booking with multiple tours, customer info, and payment details.
+    Handle booking operations:
     
+    GET /api/booking/ - Retrieve all bookings with comprehensive data from all related tables:
+    - Booking information
+    - Customer details (name, email, phone, country, etc.)
+    - Tour details (multiple tours per booking)
+    - Pricing breakdown (detailed cost breakdown)  
+    - Payment details (method, status, amounts)
+    - Statistics (total bookings, customers, tours, revenue)
+    
+    POST /api/booking/ - Create a new booking with multiple tours, customer info, and payment details.
     Expected data structure matches the provided JSON format with:
     - customer: customer information
     - tours: list of tours in the booking
@@ -25,21 +35,188 @@ def create_booking(request):
     - Additional booking metadata
     """
     if request.method == 'GET':
-        return Response({
-            'message': 'Booking API endpoint is ready',
-            'method': 'POST',
-            'endpoint': '/api/booking/',
-            'status': 'active'
-        }, status=status.HTTP_200_OK)
+        try:
+            # Get all bookings with related data
+            bookings = Booking.objects.select_related('customer', 'payment_details', 'created_by').prefetch_related(
+                'booking_tours', 'pricing_breakdown'
+            ).all().order_by('-created_at')
+            
+            booking_data = []
+            
+            for booking in bookings:
+                # Customer data
+                customer_data = {
+                    'id': str(booking.customer.id),
+                    'name': booking.customer.name,
+                    'email': booking.customer.email,
+                    'phone': booking.customer.phone,
+                    'language': booking.customer.language,
+                    'country': booking.customer.country,
+                    'idNumber': booking.customer.id_number,
+                    'cpf': booking.customer.cpf,
+                    'address': booking.customer.address,
+                    'company': booking.customer.company,
+                    'location': booking.customer.location,
+                    'status': booking.customer.status,
+                    'totalBookings': booking.customer.total_bookings,
+                    'totalSpent': float(booking.customer.total_spent),
+                    'lastBooking': booking.customer.last_booking,
+                    'notes': booking.customer.notes,
+                    'avatar': booking.customer.avatar,
+                    'createdAt': booking.customer.created_at,
+                    'updatedAt': booking.customer.updated_at,
+                }
+                
+                # Tours data
+                tours_data = []
+                for tour in booking.booking_tours.all():
+                    tours_data.append({
+                        'id': tour.id,
+                        'tourId': tour.tour_reference_id,
+                        'tourName': tour.tour_name,
+                        'tourCode': tour.tour_code,
+                        'date': tour.date,
+                        'pickupAddress': tour.pickup_address,
+                        'pickupTime': tour.pickup_time,
+                        'adultPax': tour.adult_pax,
+                        'adultPrice': float(tour.adult_price),
+                        'childPax': tour.child_pax,
+                        'childPrice': float(tour.child_price),
+                        'infantPax': tour.infant_pax,
+                        'infantPrice': float(tour.infant_price),
+                        'subtotal': float(tour.subtotal),
+                        'operator': tour.operator,
+                        'comments': tour.comments,
+                        'createdAt': tour.created_at,
+                        'updatedAt': tour.updated_at,
+                    })
+                
+                # Tour details (summary)
+                tour_details_data = {
+                    'destination': booking.destination,
+                    'tourType': booking.tour_type,
+                    'startDate': booking.start_date,
+                    'endDate': booking.end_date,
+                    'passengers': booking.passengers,
+                    'passengerBreakdown': {
+                        'adults': booking.total_adults,
+                        'children': booking.total_children,
+                        'infants': booking.total_infants,
+                    },
+                    'hotel': booking.hotel,
+                    'room': booking.room,
+                }
+                
+                # Pricing breakdown
+                pricing_breakdown = []
+                for breakdown in booking.pricing_breakdown.all():
+                    pricing_breakdown.append({
+                        'item': breakdown.item,
+                        'quantity': breakdown.quantity,
+                        'unitPrice': float(breakdown.unit_price),
+                        'total': float(breakdown.total),
+                    })
+                
+                # Pricing data
+                pricing_data = {
+                    'amount': float(booking.total_amount),
+                    'currency': booking.currency,
+                    'breakdown': pricing_breakdown,
+                }
+                
+                # Payment details
+                payment_details_data = None
+                if hasattr(booking, 'payment_details'):
+                    payment_details_data = {
+                        'date': booking.payment_details.date,
+                        'method': booking.payment_details.method,
+                        'percentage': float(booking.payment_details.percentage),
+                        'amountPaid': float(booking.payment_details.amount_paid),
+                        'comments': booking.payment_details.comments,
+                        'status': booking.payment_details.status,
+                        'receiptFile': booking.payment_details.receipt_file.url if booking.payment_details.receipt_file else None,
+                        'createdAt': booking.payment_details.created_at,
+                        'updatedAt': booking.payment_details.updated_at,
+                    }
+                
+                # Created by user data
+                created_by_data = None
+                if booking.created_by:
+                    created_by_data = {
+                        'id': str(booking.created_by.id),
+                        'email': booking.created_by.email,
+                        'fullName': booking.created_by.full_name,
+                        'phone': booking.created_by.phone,
+                        'company': booking.created_by.company,
+                    }
+
+                # Compile complete booking data
+                booking_item = {
+                    'id': str(booking.id),
+                    'customer': customer_data,
+                    'tours': tours_data,
+                    'tourDetails': tour_details_data,
+                    'pricing': pricing_data,
+                    'leadSource': booking.lead_source,
+                    'assignedTo': booking.assigned_to,
+                    'agency': booking.agency,
+                    'status': booking.status,
+                    'validUntil': booking.valid_until,
+                    'additionalNotes': booking.additional_notes,
+                    'hasMultipleAddresses': booking.has_multiple_addresses,
+                    'termsAccepted': {
+                        'accepted': booking.terms_accepted
+                    },
+                    'quotationComments': booking.quotation_comments,
+                    'includePayment': booking.include_payment,
+                    'copyComments': booking.copy_comments,
+                    'sendPurchaseOrder': booking.send_purchase_order,
+                    'sendQuotationAccess': booking.send_quotation_access,
+                    'paymentDetails': payment_details_data,
+                    'createdBy': created_by_data,
+                    'createdAt': booking.created_at,
+                    'updatedAt': booking.updated_at,
+                }
+                
+                booking_data.append(booking_item)
+            
+            # Additional statistics
+            total_bookings = Booking.objects.count()
+            total_customers = Booking.objects.values('customer').distinct().count()
+            total_tours = BookingTour.objects.count()
+            total_revenue = sum(booking.total_amount for booking in bookings)
+            
+            return Response({
+                'success': True,
+                'message': f'Retrieved {len(booking_data)} bookings successfully',
+                'data': booking_data,
+                'statistics': {
+                    'totalBookings': total_bookings,
+                    'totalCustomers': total_customers,
+                    'totalTours': total_tours,
+                    'totalRevenue': float(total_revenue),
+                    'currency': 'CLP' if bookings else 'USD',
+                },
+                'count': len(booking_data),
+                'timestamp': timezone.now(),
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving booking data: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Error retrieving booking data',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     try:
-        serializer = BookingSerializer(data=request.data)
+        serializer = BookingSerializer(data=request.data, context={'request': request})
         
         if serializer.is_valid():
             booking = serializer.save()
             
             # Return the created booking data
-            response_serializer = BookingSerializer(booking)
+            response_serializer = BookingSerializer(booking, context={'request': request})
             
             return Response({
                 'success': True,
