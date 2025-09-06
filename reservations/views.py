@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@api_view(['POST'])
+@api_view(['POST', 'GET'])
 @permission_classes([IsAuthenticated])
 def create_booking(request):
     """
@@ -24,6 +24,14 @@ def create_booking(request):
     - paymentDetails: payment information
     - Additional booking metadata
     """
+    if request.method == 'GET':
+        return Response({
+            'message': 'Booking API endpoint is ready',
+            'method': 'POST',
+            'endpoint': '/api/booking/',
+            'status': 'active'
+        }, status=status.HTTP_200_OK)
+    
     try:
         serializer = BookingSerializer(data=request.data)
         

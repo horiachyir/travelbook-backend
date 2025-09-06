@@ -31,49 +31,44 @@ class BookingPaymentSerializer(serializers.ModelSerializer):
         ]
 
 
-class BookingSerializer(serializers.ModelSerializer):
-    # Nested serializers
-    booking_tours = BookingTourSerializer(many=True)
-    pricing_breakdown = BookingPricingBreakdownSerializer(many=True)
-    payment_details = BookingPaymentSerializer(required=False)
-    
-    # Customer data for creation
+class BookingSerializer(serializers.Serializer):
+    # Input fields (write-only) - matching the JSON structure you provided
     customer = serializers.DictField(write_only=True)
-    
-    # Tour details data
     tours = serializers.ListField(child=serializers.DictField(), write_only=True)
-    tour_details = serializers.DictField(write_only=True)
+    tourDetails = serializers.DictField(write_only=True)
     pricing = serializers.DictField(write_only=True)
-    payment_details_input = serializers.DictField(write_only=True, source='payment_details')
+    leadSource = serializers.CharField(write_only=True)
+    assignedTo = serializers.CharField(write_only=True)
+    agency = serializers.CharField(allow_null=True, required=False, write_only=True)
+    status = serializers.CharField(write_only=True)
+    validUntil = serializers.DateTimeField(write_only=True)
+    additionalNotes = serializers.CharField(allow_blank=True, required=False, write_only=True)
+    hasMultipleAddresses = serializers.BooleanField(write_only=True)
+    termsAccepted = serializers.DictField(write_only=True)
+    quotationComments = serializers.CharField(allow_blank=True, required=False, write_only=True)
+    includePayment = serializers.BooleanField(write_only=True)
+    copyComments = serializers.BooleanField(write_only=True)
+    sendPurchaseOrder = serializers.BooleanField(write_only=True)
+    sendQuotationAccess = serializers.BooleanField(write_only=True)
+    paymentDetails = serializers.DictField(required=False, write_only=True)
     
-    # Additional fields from the input
-    terms_accepted_input = serializers.DictField(write_only=True, source='terms_accepted')
-
-    class Meta:
-        model = Booking
-        fields = [
-            'id', 'customer', 'destination', 'tour_type', 'start_date', 'end_date',
-            'passengers', 'total_adults', 'total_children', 'total_infants',
-            'hotel', 'room', 'total_amount', 'currency', 'lead_source',
-            'assigned_to', 'agency', 'status', 'valid_until', 'additional_notes',
-            'has_multiple_addresses', 'terms_accepted', 'quotation_comments',
-            'include_payment', 'copy_comments', 'send_purchase_order',
-            'send_quotation_access', 'created_at', 'updated_at',
-            'booking_tours', 'pricing_breakdown', 'payment_details',
-            'tours', 'tour_details', 'pricing', 'payment_details_input',
-            'terms_accepted_input'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+    # Output fields (read-only) - for the response
+    id = serializers.UUIDField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    booking_tours = BookingTourSerializer(many=True, read_only=True)
+    pricing_breakdown = BookingPricingBreakdownSerializer(many=True, read_only=True)
+    payment_details = BookingPaymentSerializer(read_only=True)
 
     @transaction.atomic
     def create(self, validated_data):
         # Extract nested data
         customer_data = validated_data.pop('customer')
         tours_data = validated_data.pop('tours')
-        tour_details_data = validated_data.pop('tour_details')
+        tour_details_data = validated_data.pop('tourDetails')
         pricing_data = validated_data.pop('pricing')
-        payment_details_data = validated_data.pop('payment_details', None)
-        terms_accepted_data = validated_data.pop('terms_accepted', {})
+        payment_details_data = validated_data.pop('paymentDetails', None)
+        terms_accepted_data = validated_data.pop('termsAccepted', {})
         
         # Handle customer - get or create
         customer, created = Customer.objects.get_or_create(
@@ -119,11 +114,20 @@ class BookingSerializer(serializers.ModelSerializer):
             'room': tour_details_data.get('room', ''),
             'total_amount': pricing_data.get('amount', 0),
             'currency': pricing_data.get('currency', 'USD'),
+            'lead_source': validated_data.get('leadSource'),
+            'assigned_to': validated_data.get('assignedTo'),
+            'agency': validated_data.get('agency'),
+            'status': validated_data.get('status'),
+            'valid_until': validated_data.get('validUntil'),
+            'additional_notes': validated_data.get('additionalNotes', ''),
+            'has_multiple_addresses': validated_data.get('hasMultipleAddresses', False),
             'terms_accepted': terms_accepted_data.get('accepted', False),
+            'quotation_comments': validated_data.get('quotationComments', ''),
+            'include_payment': validated_data.get('includePayment', True),
+            'copy_comments': validated_data.get('copyComments', True),
+            'send_purchase_order': validated_data.get('sendPurchaseOrder', True),
+            'send_quotation_access': validated_data.get('sendQuotationAccess', True),
         }
-        
-        # Update with remaining validated_data
-        booking_data.update(validated_data)
         
         booking = Booking.objects.create(**booking_data)
         
@@ -173,3 +177,58 @@ class BookingSerializer(serializers.ModelSerializer):
             )
         
         return booking
+
+    def to_representation(self, instance):
+        """Return the created booking data"""
+        if instance:
+            return {
+                'id': str(instance.id),
+                'customer': {
+                    'id': str(instance.customer.id),
+                    'name': instance.customer.name,
+                    'email': instance.customer.email,
+                    'phone': instance.customer.phone,
+                    'country': instance.customer.country,
+                },
+                'destination': instance.destination,
+                'tour_type': instance.tour_type,
+                'start_date': instance.start_date,
+                'end_date': instance.end_date,
+                'passengers': instance.passengers,
+                'total_amount': float(instance.total_amount),
+                'currency': instance.currency,
+                'status': instance.status,
+                'lead_source': instance.lead_source,
+                'assigned_to': instance.assigned_to,
+                'created_at': instance.created_at,
+                'updated_at': instance.updated_at,
+                'booking_tours': [
+                    {
+                        'id': tour.id,
+                        'tour_name': tour.tour_name,
+                        'tour_code': tour.tour_code,
+                        'date': tour.date,
+                        'adult_pax': tour.adult_pax,
+                        'child_pax': tour.child_pax,
+                        'infant_pax': tour.infant_pax,
+                        'subtotal': float(tour.subtotal),
+                        'operator': tour.operator,
+                    } for tour in instance.booking_tours.all()
+                ],
+                'pricing_breakdown': [
+                    {
+                        'item': breakdown.item,
+                        'quantity': breakdown.quantity,
+                        'unit_price': float(breakdown.unit_price),
+                        'total': float(breakdown.total),
+                    } for breakdown in instance.pricing_breakdown.all()
+                ],
+                'payment_details': {
+                    'method': instance.payment_details.method,
+                    'amount_paid': float(instance.payment_details.amount_paid),
+                    'percentage': float(instance.payment_details.percentage),
+                    'status': instance.payment_details.status,
+                    'date': instance.payment_details.date,
+                } if hasattr(instance, 'payment_details') else None,
+            }
+        return super().to_representation(instance)
