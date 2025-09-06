@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/quotes/', include('quotes.urls')),
     path('api/tours/', include('tours.urls')),
     path('api/reservations/', include('reservations.urls')),
+    path('api/', include('reservations.urls')),  # Direct booking endpoint
     path('api/customers/', include('customers.urls')),
     path('api/commissions/', include('commissions.urls')),
     path('api/logistics/', include('logistics.urls')),
