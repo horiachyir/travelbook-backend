@@ -125,19 +125,20 @@ def create_booking(request):
                     'breakdown': pricing_breakdown,
                 }
                 
-                # Payment details
+                # Payment details - get the first payment if exists
                 payment_details_data = None
-                if hasattr(booking, 'payment_details'):
+                if booking.payment_details.exists():
+                    payment = booking.payment_details.first()
                     payment_details_data = {
-                        'date': booking.payment_details.date,
-                        'method': booking.payment_details.method,
-                        'percentage': float(booking.payment_details.percentage),
-                        'amountPaid': float(booking.payment_details.amount_paid),
-                        'comments': booking.payment_details.comments,
-                        'status': booking.payment_details.status,
-                        'receiptFile': booking.payment_details.receipt_file.url if booking.payment_details.receipt_file else None,
-                        'createdAt': booking.payment_details.created_at,
-                        'updatedAt': booking.payment_details.updated_at,
+                        'date': payment.date,
+                        'method': payment.method,
+                        'percentage': float(payment.percentage),
+                        'amountPaid': float(payment.amount_paid),
+                        'comments': payment.comments,
+                        'status': payment.status,
+                        'receiptFile': payment.receipt_file.url if payment.receipt_file else None,
+                        'createdAt': payment.created_at,
+                        'updatedAt': payment.updated_at,
                     }
                 
                 # Created by user data

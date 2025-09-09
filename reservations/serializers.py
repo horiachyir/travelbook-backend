@@ -229,11 +229,11 @@ class BookingSerializer(serializers.Serializer):
                     } for breakdown in instance.pricing_breakdown.all()
                 ],
                 'payment_details': {
-                    'method': instance.payment_details.method,
-                    'amount_paid': float(instance.payment_details.amount_paid),
-                    'percentage': float(instance.payment_details.percentage),
-                    'status': instance.payment_details.status,
-                    'date': instance.payment_details.date,
-                } if hasattr(instance, 'payment_details') else None,
+                    'method': instance.payment_details.first().method,
+                    'amount_paid': float(instance.payment_details.first().amount_paid),
+                    'percentage': float(instance.payment_details.first().percentage),
+                    'status': instance.payment_details.first().status,
+                    'date': instance.payment_details.first().date,
+                } if instance.payment_details.exists() else None,
             }
         return super().to_representation(instance)
