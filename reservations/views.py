@@ -293,3 +293,118 @@ def get_booking(request, booking_id):
             'message': 'Internal server error occurred while retrieving booking',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_booking_payment(request):
+    """
+    Handle POST /api/booking/payment/ requests.
+    
+    Expected data structure:
+    {
+        "bookingOptions": {
+            "copyComments": true,
+            "includePayment": true,
+            "quoteComments": "",
+            "sendPurchaseOrder": true,
+            "sendQuotationAccess": true
+        },
+        "customer": {
+            "email": "david@gmail.com",
+            "name": "David",
+            "phone": "+56 5 6565 6564"
+        },
+        "paymentDetails": {
+            "amountPaid": 144,
+            "comments": "Good",
+            "date": "2025-09-11T21:00:00.000Z",
+            "method": "credit-card",
+            "percentage": 15,
+            "receiptFile": null,
+            "status": "pending"
+        }
+    }
+    
+    This endpoint stores only bookingOptions and paymentDetails in the booking_payments table.
+    The booking_id is set to the most recently created booking in the bookings table.
+    """
+    try:
+        data = request.data
+        
+        # Validate required fields
+        if 'bookingOptions' not in data or 'paymentDetails' not in data:
+            return Response({
+                'success': False,
+                'message': 'Missing required fields: bookingOptions and paymentDetails'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        booking_options = data['bookingOptions']
+        payment_details = data['paymentDetails']
+        
+        # Get the most recent booking
+        try:
+            most_recent_booking = Booking.objects.order_by('-created_at').first()
+            if not most_recent_booking:
+                return Response({
+                    'success': False,
+                    'message': 'No bookings found to attach payment to'
+                }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving most recent booking: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Error retrieving booking information',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Create the booking payment record
+        try:
+            with transaction.atomic():
+                booking_payment = BookingPayment.objects.create(
+                    booking=most_recent_booking,
+                    date=payment_details.get('date'),
+                    method=payment_details.get('method'),
+                    percentage=payment_details.get('percentage'),
+                    amount_paid=payment_details.get('amountPaid'),
+                    comments=payment_details.get('comments', ''),
+                    status=payment_details.get('status', 'pending'),
+                    receipt_file=payment_details.get('receiptFile'),
+                    # Booking options
+                    copy_comments=booking_options.get('copyComments', True),
+                    include_payment=booking_options.get('includePayment', True),
+                    quote_comments=booking_options.get('quoteComments', ''),
+                    send_purchase_order=booking_options.get('sendPurchaseOrder', True),
+                    send_quotation_access=booking_options.get('sendQuotationAccess', True),
+                    created_by=request.user
+                )
+                
+                return Response({
+                    'success': True,
+                    'message': 'Payment details saved successfully',
+                    'data': {
+                        'payment_id': booking_payment.id,
+                        'booking_id': str(most_recent_booking.id),
+                        'amount_paid': float(booking_payment.amount_paid),
+                        'method': booking_payment.method,
+                        'status': booking_payment.status,
+                        'date': booking_payment.date,
+                        'created_at': booking_payment.created_at
+                    }
+                }, status=status.HTTP_201_CREATED)
+                
+        except Exception as e:
+            logger.error(f"Error creating booking payment: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Error saving payment details',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    except Exception as e:
+        logger.error(f"Error processing payment request: {str(e)}")
+        return Response({
+            'success': False,
+            'message': 'Internal server error occurred while processing payment',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -169,7 +169,7 @@ class BookingPayment(models.Model):
         ('refunded', 'Refunded'),
     ]
     
-    booking = models.OneToOneField(Booking, on_delete=models.CASCADE, related_name='payment_details')
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='payment_details')
     date = models.DateTimeField()
     method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES)
     percentage = models.DecimalField(max_digits=5, decimal_places=2)
@@ -177,6 +177,13 @@ class BookingPayment(models.Model):
     comments = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     receipt_file = models.FileField(upload_to='receipts/', blank=True, null=True)
+    
+    # Booking options
+    copy_comments = models.BooleanField(default=True)
+    include_payment = models.BooleanField(default=True)
+    quote_comments = models.TextField(blank=True)
+    send_purchase_order = models.BooleanField(default=True)
+    send_quotation_access = models.BooleanField(default=True)
     
     # User tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_payments')
