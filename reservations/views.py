@@ -125,11 +125,13 @@ def create_booking(request):
                     'breakdown': pricing_breakdown,
                 }
                 
-                # Payment details - get the first payment if exists
-                payment_details_data = None
-                if booking.payment_details.exists():
-                    payment = booking.payment_details.first()
-                    payment_details_data = {
+                # Payment details - get all payments for this booking
+                payments_data = []
+                booking_options_data = None
+                
+                for payment in booking.payment_details.all().order_by('-created_at'):
+                    payments_data.append({
+                        'id': payment.id,
                         'date': payment.date,
                         'method': payment.method,
                         'percentage': float(payment.percentage),
@@ -139,6 +141,29 @@ def create_booking(request):
                         'receiptFile': payment.receipt_file.url if payment.receipt_file else None,
                         'createdAt': payment.created_at,
                         'updatedAt': payment.updated_at,
+                    })
+                    
+                    # Get booking options from the most recent payment record
+                    if not booking_options_data:
+                        booking_options_data = {
+                            'copyComments': payment.copy_comments,
+                            'includePayment': payment.include_payment,
+                            'quoteComments': payment.quote_comments,
+                            'sendPurchaseOrder': payment.send_purchase_order,
+                            'sendQuotationAccess': payment.send_quotation_access,
+                        }
+                
+                # For backward compatibility - keep single payment_details field with most recent payment
+                payment_details_data = payments_data[0] if payments_data else None
+                
+                # If no payment record, get booking options from booking table (backward compatibility)
+                if not booking_options_data:
+                    booking_options_data = {
+                        'copyComments': booking.copy_comments,
+                        'includePayment': booking.include_payment,
+                        'quoteComments': booking.quotation_comments,
+                        'sendPurchaseOrder': booking.send_purchase_order,
+                        'sendQuotationAccess': booking.send_quotation_access,
                     }
                 
                 # Created by user data
@@ -174,7 +199,9 @@ def create_booking(request):
                     'copyComments': booking.copy_comments,
                     'sendPurchaseOrder': booking.send_purchase_order,
                     'sendQuotationAccess': booking.send_quotation_access,
-                    'paymentDetails': payment_details_data,
+                    'paymentDetails': payment_details_data,  # Single payment for backward compatibility
+                    'allPayments': payments_data,  # All payments for this booking
+                    'bookingOptions': booking_options_data,  # Booking options from payment or booking record
                     'createdBy': created_by_data,
                     'createdAt': booking.created_at,
                     'updatedAt': booking.updated_at,
