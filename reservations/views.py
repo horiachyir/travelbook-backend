@@ -38,8 +38,8 @@ def create_booking(request):
     if request.method == 'GET':
         try:
             # Get bookings created by the current authenticated user only
-            bookings = Booking.objects.select_related('customer', 'payment_details', 'created_by').prefetch_related(
-                'booking_tours', 'pricing_breakdown'
+            bookings = Booking.objects.select_related('customer', 'created_by').prefetch_related(
+                'booking_tours', 'pricing_breakdown', 'payment_details'
             ).filter(created_by=request.user).order_by('-created_at')
             
             booking_data = []
