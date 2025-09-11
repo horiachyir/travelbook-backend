@@ -43,7 +43,7 @@ class BookingSerializer(serializers.Serializer):
     status = serializers.CharField(write_only=True)
     validUntil = serializers.DateTimeField(write_only=True)
     additionalNotes = serializers.CharField(allow_blank=True, required=False, write_only=True)
-    hasMultipleAddresses = serializers.BooleanField(write_only=True)
+    hasMultipleAddresses = serializers.BooleanField(required=False, default=False, write_only=True)
     termsAccepted = serializers.DictField(write_only=True)
     quotationComments = serializers.CharField(allow_blank=True, required=False, write_only=True)
     includePayment = serializers.BooleanField(write_only=True)
