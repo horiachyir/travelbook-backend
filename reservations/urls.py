@@ -14,4 +14,8 @@ urlpatterns = [
     
     # Delete booking endpoint - support both with and without trailing slash
     re_path(r'^booking/(?P<booking_id>[0-9a-f-]+)$', views.delete_booking, name='delete_booking_no_slash'),
+    
+    # Get all reservations endpoint - support both with and without trailing slash
+    path('', views.get_all_reservations, name='get_all_reservations'),
+    re_path(r'^$', views.get_all_reservations, name='get_all_reservations_no_slash'),
 ]

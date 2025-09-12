@@ -500,3 +500,237 @@ def delete_booking(request, booking_id):
             'message': 'Internal server error occurred while deleting booking',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_reservations(request):
+    """
+    Retrieve all booking data from all related tables without user filtering.
+    
+    GET /api/reservations/
+    
+    This endpoint returns comprehensive data from:
+    - bookings table (all bookings from all users)
+    - booking_tours table (all tours associated with bookings)
+    - booking_pricing_breakdown table (all pricing breakdowns)
+    - booking_payments table (all payment records)
+    - customers table (all customer information)
+    
+    No user filtering is applied - returns all data stored in the database.
+    """
+    try:
+        # Get all bookings with related data
+        bookings = Booking.objects.select_related('customer', 'created_by').prefetch_related(
+            'booking_tours', 'pricing_breakdown', 'payment_details'
+        ).all().order_by('-created_at')
+        
+        booking_data = []
+        
+        for booking in bookings:
+            # Customer data
+            customer_data = {
+                'id': str(booking.customer.id),
+                'name': booking.customer.name,
+                'email': booking.customer.email,
+                'phone': booking.customer.phone,
+                'language': booking.customer.language,
+                'country': booking.customer.country,
+                'idNumber': booking.customer.id_number,
+                'cpf': booking.customer.cpf,
+                'address': booking.customer.address,
+                'company': booking.customer.company,
+                'location': booking.customer.location,
+                'status': booking.customer.status,
+                'totalBookings': booking.customer.total_bookings,
+                'totalSpent': float(booking.customer.total_spent),
+                'lastBooking': booking.customer.last_booking,
+                'notes': booking.customer.notes,
+                'avatar': booking.customer.avatar,
+                'createdAt': booking.customer.created_at,
+                'updatedAt': booking.customer.updated_at,
+            }
+            
+            # Tours data
+            tours_data = []
+            for tour in booking.booking_tours.all():
+                tours_data.append({
+                    'id': tour.id,
+                    'tourId': tour.tour_reference_id,
+                    'tourName': tour.tour_name,
+                    'tourCode': tour.tour_code,
+                    'date': tour.date,
+                    'pickupAddress': tour.pickup_address,
+                    'pickupTime': tour.pickup_time,
+                    'adultPax': tour.adult_pax,
+                    'adultPrice': float(tour.adult_price),
+                    'childPax': tour.child_pax,
+                    'childPrice': float(tour.child_price),
+                    'infantPax': tour.infant_pax,
+                    'infantPrice': float(tour.infant_price),
+                    'subtotal': float(tour.subtotal),
+                    'operator': tour.operator,
+                    'comments': tour.comments,
+                    'createdBy': str(tour.created_by.id) if tour.created_by else None,
+                    'createdAt': tour.created_at,
+                    'updatedAt': tour.updated_at,
+                })
+            
+            # Tour details (summary)
+            tour_details_data = {
+                'destination': booking.destination,
+                'tourType': booking.tour_type,
+                'startDate': booking.start_date,
+                'endDate': booking.end_date,
+                'passengers': booking.passengers,
+                'passengerBreakdown': {
+                    'adults': booking.total_adults,
+                    'children': booking.total_children,
+                    'infants': booking.total_infants,
+                },
+                'hotel': booking.hotel,
+                'room': booking.room,
+            }
+            
+            # Pricing breakdown
+            pricing_breakdown = []
+            for breakdown in booking.pricing_breakdown.all():
+                pricing_breakdown.append({
+                    'id': breakdown.id,
+                    'item': breakdown.item,
+                    'quantity': breakdown.quantity,
+                    'unitPrice': float(breakdown.unit_price),
+                    'total': float(breakdown.total),
+                    'createdBy': str(breakdown.created_by.id) if breakdown.created_by else None,
+                    'createdAt': breakdown.created_at,
+                })
+            
+            # Pricing data
+            pricing_data = {
+                'amount': float(booking.total_amount),
+                'currency': booking.currency,
+                'breakdown': pricing_breakdown,
+            }
+            
+            # Payment details - get all payments for this booking
+            payments_data = []
+            booking_options_data = None
+            
+            for payment in booking.payment_details.all().order_by('-created_at'):
+                payments_data.append({
+                    'id': payment.id,
+                    'date': payment.date,
+                    'method': payment.method,
+                    'percentage': float(payment.percentage),
+                    'amountPaid': float(payment.amount_paid),
+                    'comments': payment.comments,
+                    'status': payment.status,
+                    'receiptFile': payment.receipt_file.url if payment.receipt_file else None,
+                    'copyComments': payment.copy_comments,
+                    'includePayment': payment.include_payment,
+                    'quoteComments': payment.quote_comments,
+                    'sendPurchaseOrder': payment.send_purchase_order,
+                    'sendQuotationAccess': payment.send_quotation_access,
+                    'createdBy': str(payment.created_by.id) if payment.created_by else None,
+                    'createdAt': payment.created_at,
+                    'updatedAt': payment.updated_at,
+                })
+                
+                # Get booking options from the most recent payment record
+                if not booking_options_data:
+                    booking_options_data = {
+                        'copyComments': payment.copy_comments,
+                        'includePayment': payment.include_payment,
+                        'quoteComments': payment.quote_comments,
+                        'sendPurchaseOrder': payment.send_purchase_order,
+                        'sendQuotationAccess': payment.send_quotation_access,
+                    }
+            
+            # For backward compatibility - keep single payment_details field with most recent payment
+            payment_details_data = payments_data[0] if payments_data else None
+            
+            # If no payment record, get booking options from booking table (backward compatibility)
+            if not booking_options_data:
+                booking_options_data = {
+                    'copyComments': booking.copy_comments,
+                    'includePayment': booking.include_payment,
+                    'quoteComments': booking.quotation_comments,
+                    'sendPurchaseOrder': booking.send_purchase_order,
+                    'sendQuotationAccess': booking.send_quotation_access,
+                }
+            
+            # Created by user data
+            created_by_data = None
+            if booking.created_by:
+                created_by_data = {
+                    'id': str(booking.created_by.id),
+                    'email': booking.created_by.email,
+                    'fullName': booking.created_by.full_name,
+                    'phone': booking.created_by.phone,
+                    'company': booking.created_by.company,
+                }
+
+            # Compile complete booking data
+            booking_item = {
+                'id': str(booking.id),
+                'customer': customer_data,
+                'tours': tours_data,
+                'tourDetails': tour_details_data,
+                'pricing': pricing_data,
+                'leadSource': booking.lead_source,
+                'assignedTo': booking.assigned_to,
+                'agency': booking.agency,
+                'status': booking.status,
+                'validUntil': booking.valid_until,
+                'additionalNotes': booking.additional_notes,
+                'hasMultipleAddresses': booking.has_multiple_addresses,
+                'termsAccepted': {
+                    'accepted': booking.terms_accepted
+                },
+                'quotationComments': booking.quotation_comments,
+                'includePayment': booking.include_payment,
+                'copyComments': booking.copy_comments,
+                'sendPurchaseOrder': booking.send_purchase_order,
+                'sendQuotationAccess': booking.send_quotation_access,
+                'paymentDetails': payment_details_data,  # Single payment for backward compatibility
+                'allPayments': payments_data,  # All payments for this booking
+                'bookingOptions': booking_options_data,  # Booking options from payment or booking record
+                'createdBy': created_by_data,
+                'createdAt': booking.created_at,
+                'updatedAt': booking.updated_at,
+            }
+            
+            booking_data.append(booking_item)
+        
+        # Additional statistics (for all bookings, not filtered by user)
+        total_bookings = Booking.objects.count()
+        total_customers = Booking.objects.values('customer').distinct().count()
+        total_tours = BookingTour.objects.count()
+        total_revenue = sum(booking.total_amount for booking in bookings)
+        total_payments = BookingPayment.objects.count()
+        total_pricing_items = BookingPricingBreakdown.objects.count()
+        
+        return Response({
+            'success': True,
+            'message': f'Retrieved {len(booking_data)} reservations successfully',
+            'data': booking_data,
+            'statistics': {
+                'totalBookings': total_bookings,
+                'totalCustomers': total_customers,
+                'totalTours': total_tours,
+                'totalPayments': total_payments,
+                'totalPricingItems': total_pricing_items,
+                'totalRevenue': float(total_revenue),
+                'currency': 'CLP' if bookings else 'USD',
+            },
+            'count': len(booking_data),
+            'timestamp': timezone.now(),
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error retrieving all reservations data: {str(e)}")
+        return Response({
+            'success': False,
+            'message': 'Error retrieving all reservations data',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
