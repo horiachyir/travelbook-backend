@@ -183,6 +183,153 @@ class BookingSerializer(serializers.Serializer):
         
         return booking
 
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        # Extract nested data
+        customer_data = validated_data.pop('customer', None)
+        tours_data = validated_data.pop('tours', None)
+        tour_details_data = validated_data.pop('tourDetails', None)
+        pricing_data = validated_data.pop('pricing', None)
+        payment_details_data = validated_data.pop('paymentDetails', None)
+        terms_accepted_data = validated_data.pop('termsAccepted', {})
+
+        # Update customer if provided
+        if customer_data:
+            customer_email = customer_data.get('email')
+
+            # If email changed, try to get existing customer or create new one
+            if customer_email and customer_email != instance.customer.email:
+                customer, created = Customer.objects.get_or_create(
+                    email=customer_email,
+                    defaults={
+                        'name': customer_data.get('name', ''),
+                        'phone': customer_data.get('phone', ''),
+                        'language': customer_data.get('language', 'en'),
+                        'country': customer_data.get('country', ''),
+                        'id_number': customer_data.get('idNumber', ''),
+                        'cpf': customer_data.get('cpf', ''),
+                        'address': customer_data.get('address', ''),
+                    }
+                )
+                instance.customer = customer
+            else:
+                # Update existing customer
+                customer = instance.customer
+                for field_map in [
+                    ('name', 'name'),
+                    ('phone', 'phone'),
+                    ('language', 'language'),
+                    ('country', 'country'),
+                    ('id_number', 'idNumber'),
+                    ('cpf', 'cpf'),
+                    ('address', 'address'),
+                ]:
+                    model_field, data_field = field_map
+                    if data_field in customer_data and customer_data[data_field]:
+                        setattr(customer, model_field, customer_data[data_field])
+                customer.save()
+
+        # Update booking with data from tour_details and other sections
+        if tour_details_data:
+            instance.destination = tour_details_data.get('destination', instance.destination)
+            instance.tour_type = tour_details_data.get('tourType', instance.tour_type)
+            instance.start_date = tour_details_data.get('startDate', instance.start_date)
+            instance.end_date = tour_details_data.get('endDate', instance.end_date)
+            instance.passengers = tour_details_data.get('passengers', instance.passengers)
+
+            passenger_breakdown = tour_details_data.get('passengerBreakdown', {})
+            instance.total_adults = passenger_breakdown.get('adults', instance.total_adults)
+            instance.total_children = passenger_breakdown.get('children', instance.total_children)
+            instance.total_infants = passenger_breakdown.get('infants', instance.total_infants)
+
+            instance.hotel = tour_details_data.get('hotel', instance.hotel)
+            instance.room = tour_details_data.get('room', instance.room)
+
+        if pricing_data:
+            instance.total_amount = pricing_data.get('amount', instance.total_amount)
+            instance.currency = pricing_data.get('currency', instance.currency)
+
+        # Update other booking fields
+        instance.lead_source = validated_data.get('leadSource', instance.lead_source)
+        instance.assigned_to = validated_data.get('assignedTo', instance.assigned_to)
+        instance.agency = validated_data.get('agency', instance.agency)
+        instance.status = validated_data.get('status', instance.status)
+        instance.valid_until = validated_data.get('validUntil', instance.valid_until)
+        instance.additional_notes = validated_data.get('additionalNotes', instance.additional_notes)
+        instance.has_multiple_addresses = validated_data.get('hasMultipleAddresses', instance.has_multiple_addresses)
+        instance.terms_accepted = terms_accepted_data.get('accepted', instance.terms_accepted)
+        instance.quotation_comments = validated_data.get('quotationComments', instance.quotation_comments)
+        instance.include_payment = validated_data.get('includePayment', instance.include_payment)
+        instance.copy_comments = validated_data.get('copyComments', instance.copy_comments)
+        instance.send_purchase_order = validated_data.get('sendPurchaseOrder', instance.send_purchase_order)
+        instance.send_quotation_access = validated_data.get('sendQuotationAccess', instance.send_quotation_access)
+
+        instance.save()
+
+        # Update tours if provided
+        if tours_data is not None:
+            # Delete existing tours
+            BookingTour.objects.filter(booking=instance).delete()
+
+            # Create new tours
+            for tour_data in tours_data:
+                BookingTour.objects.create(
+                    id=tour_data['id'],
+                    booking=instance,
+                    tour_reference_id=tour_data['tourId'],
+                    tour_name=tour_data['tourName'],
+                    tour_code=tour_data['tourCode'],
+                    date=tour_data['date'],
+                    pickup_address=tour_data['pickupAddress'],
+                    pickup_time=tour_data['pickupTime'],
+                    adult_pax=tour_data['adultPax'],
+                    adult_price=tour_data['adultPrice'],
+                    child_pax=tour_data['childPax'],
+                    child_price=tour_data['childPrice'],
+                    infant_pax=tour_data['infantPax'],
+                    infant_price=tour_data['infantPrice'],
+                    subtotal=tour_data['subtotal'],
+                    operator=tour_data['operator'],
+                    comments=tour_data.get('comments', ''),
+                    created_by=self.context['request'].user
+                )
+
+        # Update pricing breakdown if provided
+        if pricing_data and 'breakdown' in pricing_data:
+            # Delete existing pricing breakdown
+            BookingPricingBreakdown.objects.filter(booking=instance).delete()
+
+            # Create new pricing breakdown
+            for breakdown_item in pricing_data['breakdown']:
+                BookingPricingBreakdown.objects.create(
+                    booking=instance,
+                    item=breakdown_item['item'],
+                    quantity=breakdown_item['quantity'],
+                    unit_price=breakdown_item['unitPrice'],
+                    total=breakdown_item['total'],
+                    created_by=self.context['request'].user
+                )
+
+        # Update payment details if provided
+        if payment_details_data:
+            # Delete existing payments
+            BookingPayment.objects.filter(booking=instance).delete()
+
+            # Create new payment
+            BookingPayment.objects.create(
+                booking=instance,
+                date=payment_details_data['date'],
+                method=payment_details_data['method'],
+                percentage=payment_details_data['percentage'],
+                amount_paid=payment_details_data['amountPaid'],
+                comments=payment_details_data.get('comments', ''),
+                status=payment_details_data.get('status', 'pending'),
+                receipt_file=payment_details_data.get('receiptFile'),
+                created_by=self.context['request'].user
+            )
+
+        return instance
+
     def to_representation(self, instance):
         """Return the created booking data"""
         if instance:

@@ -293,32 +293,60 @@ def get_bookings(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET'])
+@api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def get_booking(request, booking_id):
     """
-    Retrieve a specific booking by ID.
+    GET - Retrieve a specific booking by ID.
+    PUT - Update a specific booking by ID with received data.
+
+    The PUT request uses the received data to retrieve and update {id} in the related tables.
+    The data structure of the received data is identical to that of a POST /api/booking/ request.
+    The received {id} is the primary ID of the "bookings" table.
+    In the related tables, it is "booking_id."
     """
     try:
         booking = Booking.objects.get(id=booking_id)
-        serializer = BookingSerializer(booking)
-        
-        return Response({
-            'success': True,
-            'data': serializer.data
-        }, status=status.HTTP_200_OK)
-        
+
+        if request.method == 'GET':
+            serializer = BookingSerializer(booking)
+
+            return Response({
+                'success': True,
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+
+        elif request.method == 'PUT':
+            serializer = BookingSerializer(booking, data=request.data, context={'request': request})
+
+            if serializer.is_valid():
+                updated_booking = serializer.save()
+
+                response_serializer = BookingSerializer(updated_booking, context={'request': request})
+
+                return Response({
+                    'success': True,
+                    'message': 'Booking updated successfully',
+                    'data': response_serializer.data
+                }, status=status.HTTP_200_OK)
+
+            return Response({
+                'success': False,
+                'message': 'Validation failed',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
     except Booking.DoesNotExist:
         return Response({
             'success': False,
             'message': 'Booking not found'
         }, status=status.HTTP_404_NOT_FOUND)
-        
+
     except Exception as e:
-        logger.error(f"Error retrieving booking {booking_id}: {str(e)}")
+        logger.error(f"Error processing booking {booking_id}: {str(e)}")
         return Response({
             'success': False,
-            'message': 'Internal server error occurred while retrieving booking',
+            'message': 'Internal server error occurred while processing booking',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
