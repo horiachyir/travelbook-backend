@@ -51,6 +51,7 @@ class BookingSerializer(serializers.Serializer):
     sendPurchaseOrder = serializers.BooleanField(write_only=True)
     sendQuotationAccess = serializers.BooleanField(write_only=True)
     paymentDetails = serializers.DictField(required=False, write_only=True)
+    shareableLink = serializers.URLField(allow_blank=True, required=False, write_only=True)
     
     # Output fields (read-only) - for the response
     id = serializers.UUIDField(read_only=True)
@@ -127,6 +128,7 @@ class BookingSerializer(serializers.Serializer):
             'copy_comments': validated_data.get('copyComments', True),
             'send_purchase_order': validated_data.get('sendPurchaseOrder', True),
             'send_quotation_access': validated_data.get('sendQuotationAccess', True),
+            'shareable_link': validated_data.get('shareableLink', ''),
         }
         
         # Add the authenticated user to booking data
@@ -263,6 +265,7 @@ class BookingSerializer(serializers.Serializer):
         instance.copy_comments = validated_data.get('copyComments', instance.copy_comments)
         instance.send_purchase_order = validated_data.get('sendPurchaseOrder', instance.send_purchase_order)
         instance.send_quotation_access = validated_data.get('sendQuotationAccess', instance.send_quotation_access)
+        instance.shareable_link = validated_data.get('shareableLink', instance.shareable_link)
 
         instance.save()
 
@@ -352,6 +355,7 @@ class BookingSerializer(serializers.Serializer):
                 'status': instance.status,
                 'lead_source': instance.lead_source,
                 'assigned_to': instance.assigned_to,
+                'shareable_link': instance.shareable_link,
                 'created_at': instance.created_at,
                 'updated_at': instance.updated_at,
                 'booking_tours': [

@@ -59,6 +59,7 @@ class Booking(models.Model):
     # Additional information
     additional_notes = models.TextField(blank=True)
     has_multiple_addresses = models.BooleanField(default=False)
+    shareable_link = models.URLField(max_length=500, blank=True, null=True)
     
     # Terms and conditions
     terms_accepted = models.BooleanField(default=False)
