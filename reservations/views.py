@@ -293,12 +293,13 @@ def get_bookings(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET', 'PUT'])
+@api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def get_booking(request, booking_id):
     """
     GET - Retrieve a specific booking by ID.
     PUT - Update a specific booking by ID with received data.
+    DELETE - Delete a specific booking by ID and all its associated data.
 
     The PUT request uses the received data to retrieve and update {id} in the related tables.
     The data structure of the received data is identical to that of a POST /api/booking/ request.
@@ -335,6 +336,37 @@ def get_booking(request, booking_id):
                 'message': 'Validation failed',
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        elif request.method == 'DELETE':
+            # Delete all associated data in a transaction
+            with transaction.atomic():
+                # Get counts for confirmation message
+                tours_count = BookingTour.objects.filter(booking=booking).count()
+                pricing_count = BookingPricingBreakdown.objects.filter(booking=booking).count()
+                payments_count = BookingPayment.objects.filter(booking=booking).count()
+
+                # Delete associated data (Django will handle this automatically with CASCADE,
+                # but we'll be explicit for clarity)
+                BookingTour.objects.filter(booking=booking).delete()
+                BookingPricingBreakdown.objects.filter(booking=booking).delete()
+                BookingPayment.objects.filter(booking=booking).delete()
+
+                # Delete the main booking record
+                booking_id_str = str(booking.id)
+                booking.delete()
+
+                logger.info(f"Deleted booking {booking_id} and associated data: {tours_count} tours, {pricing_count} pricing items, {payments_count} payments")
+
+                return Response({
+                    'success': True,
+                    'message': 'Booking and all associated data deleted successfully',
+                    'data': {
+                        'deleted_booking_id': booking_id_str,
+                        'deleted_tours': tours_count,
+                        'deleted_pricing_items': pricing_count,
+                        'deleted_payments': payments_count
+                    }
+                }, status=status.HTTP_200_OK)
 
     except Booking.DoesNotExist:
         return Response({

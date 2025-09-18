@@ -5,10 +5,7 @@ urlpatterns = [
     # Payment endpoint (must come before booking/<uuid> patterns)
     path('booking/payment/', views.create_booking_payment, name='create_booking_payment'),
 
-    # Delete booking endpoint (must come before booking/<uuid> patterns)
-    path('booking/<uuid:booking_id>/delete/', views.delete_booking, name='delete_booking'),
-
-    # GET/PUT booking endpoint - support both with and without trailing slash
+    # GET/PUT/DELETE booking endpoint - support both with and without trailing slash
     path('booking/<uuid:booking_id>/', views.get_booking, name='get_booking'),
     re_path(r'^booking/(?P<booking_id>[0-9a-f-]{36})/?$', views.get_booking, name='get_booking_flexible'),
 
