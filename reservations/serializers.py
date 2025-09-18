@@ -51,7 +51,7 @@ class BookingSerializer(serializers.Serializer):
     sendPurchaseOrder = serializers.BooleanField(write_only=True)
     sendQuotationAccess = serializers.BooleanField(write_only=True)
     paymentDetails = serializers.DictField(required=False, write_only=True)
-    shareableLink = serializers.URLField(allow_blank=True, required=False, write_only=True)
+    shareableLink = serializers.CharField(allow_blank=True, required=False, write_only=True)
     
     # Output fields (read-only) - for the response
     id = serializers.UUIDField(read_only=True)
