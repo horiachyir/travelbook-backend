@@ -1,6 +1,6 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from .models import Booking, BookingTour, BookingPayment, BookingPricingBreakdown
 from .serializers import BookingSerializer
@@ -792,5 +792,214 @@ def get_all_reservations(request):
         return Response({
             'success': False,
             'message': 'Error retrieving all reservations data',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_public_booking(request, link):
+    """
+    Public endpoint to retrieve booking data using shareable_link.
+
+    GET /api/public/booking/{link}/
+
+    This endpoint retrieves comprehensive booking data from all related tables:
+    - bookings table (using shareable_link field)
+    - customers table (customer details)
+    - booking_tours table (tours associated with booking)
+    - booking_pricing_breakdown table (pricing details)
+    - booking_payments table (payment information)
+
+    No authentication required - this is a public endpoint for shareable links.
+    """
+    try:
+        # Find booking by shareable_link
+        booking = Booking.objects.select_related('customer', 'created_by').prefetch_related(
+            'booking_tours', 'pricing_breakdown', 'payment_details'
+        ).get(shareable_link=link)
+
+        # Customer data
+        customer_data = {
+            'id': str(booking.customer.id),
+            'name': booking.customer.name,
+            'email': booking.customer.email,
+            'phone': booking.customer.phone,
+            'language': booking.customer.language,
+            'country': booking.customer.country,
+            'idNumber': booking.customer.id_number,
+            'cpf': booking.customer.cpf,
+            'address': booking.customer.address,
+            'company': booking.customer.company,
+            'location': booking.customer.location,
+            'status': booking.customer.status,
+            'totalBookings': booking.customer.total_bookings,
+            'totalSpent': float(booking.customer.total_spent),
+            'lastBooking': booking.customer.last_booking,
+            'notes': booking.customer.notes,
+            'avatar': booking.customer.avatar,
+            'createdAt': booking.customer.created_at,
+            'updatedAt': booking.customer.updated_at,
+        }
+
+        # Tours data
+        tours_data = []
+        for tour in booking.booking_tours.all():
+            tours_data.append({
+                'id': tour.id,
+                'tourId': tour.tour_reference_id,
+                'tourName': tour.tour_name,
+                'tourCode': tour.tour_code,
+                'date': tour.date,
+                'pickupAddress': tour.pickup_address,
+                'pickupTime': tour.pickup_time,
+                'adultPax': tour.adult_pax,
+                'adultPrice': float(tour.adult_price),
+                'childPax': tour.child_pax,
+                'childPrice': float(tour.child_price),
+                'infantPax': tour.infant_pax,
+                'infantPrice': float(tour.infant_price),
+                'subtotal': float(tour.subtotal),
+                'operator': tour.operator,
+                'comments': tour.comments,
+                'createdAt': tour.created_at,
+                'updatedAt': tour.updated_at,
+            })
+
+        # Tour details (summary)
+        tour_details_data = {
+            'destination': booking.destination,
+            'tourType': booking.tour_type,
+            'startDate': booking.start_date,
+            'endDate': booking.end_date,
+            'passengers': booking.passengers,
+            'passengerBreakdown': {
+                'adults': booking.total_adults,
+                'children': booking.total_children,
+                'infants': booking.total_infants,
+            },
+            'hotel': booking.hotel,
+            'room': booking.room,
+        }
+
+        # Pricing breakdown
+        pricing_breakdown = []
+        for breakdown in booking.pricing_breakdown.all():
+            pricing_breakdown.append({
+                'item': breakdown.item,
+                'quantity': breakdown.quantity,
+                'unitPrice': float(breakdown.unit_price),
+                'total': float(breakdown.total),
+            })
+
+        # Pricing data
+        pricing_data = {
+            'amount': float(booking.total_amount),
+            'currency': booking.currency,
+            'breakdown': pricing_breakdown,
+        }
+
+        # Payment details - get all payments for this booking
+        payments_data = []
+        booking_options_data = None
+
+        for payment in booking.payment_details.all().order_by('-created_at'):
+            payments_data.append({
+                'id': payment.id,
+                'date': payment.date,
+                'method': payment.method,
+                'percentage': float(payment.percentage),
+                'amountPaid': float(payment.amount_paid),
+                'comments': payment.comments,
+                'status': payment.status,
+                'receiptFile': payment.receipt_file.url if payment.receipt_file else None,
+                'createdAt': payment.created_at,
+                'updatedAt': payment.updated_at,
+            })
+
+            # Get booking options from the most recent payment record
+            if not booking_options_data:
+                booking_options_data = {
+                    'copyComments': payment.copy_comments,
+                    'includePayment': payment.include_payment,
+                    'quoteComments': payment.quote_comments,
+                    'sendPurchaseOrder': payment.send_purchase_order,
+                    'sendQuotationAccess': payment.send_quotation_access,
+                }
+
+        # For backward compatibility - keep single payment_details field with most recent payment
+        payment_details_data = payments_data[0] if payments_data else None
+
+        # If no payment record, get booking options from booking table (backward compatibility)
+        if not booking_options_data:
+            booking_options_data = {
+                'copyComments': booking.copy_comments,
+                'includePayment': booking.include_payment,
+                'quoteComments': booking.quotation_comments,
+                'sendPurchaseOrder': booking.send_purchase_order,
+                'sendQuotationAccess': booking.send_quotation_access,
+            }
+
+        # Created by user data (optional, might be sensitive)
+        created_by_data = None
+        if booking.created_by:
+            created_by_data = {
+                'id': str(booking.created_by.id),
+                'email': booking.created_by.email,
+                'fullName': booking.created_by.full_name,
+                'phone': booking.created_by.phone,
+                'company': booking.created_by.company,
+            }
+
+        # Compile complete booking data
+        booking_data = {
+            'id': str(booking.id),
+            'customer': customer_data,
+            'tours': tours_data,
+            'tourDetails': tour_details_data,
+            'pricing': pricing_data,
+            'leadSource': booking.lead_source,
+            'assignedTo': booking.assigned_to,
+            'agency': booking.agency,
+            'status': booking.status,
+            'validUntil': booking.valid_until,
+            'additionalNotes': booking.additional_notes,
+            'hasMultipleAddresses': booking.has_multiple_addresses,
+            'termsAccepted': {
+                'accepted': booking.terms_accepted
+            },
+            'quotationComments': booking.quotation_comments,
+            'includePayment': booking.include_payment,
+            'copyComments': booking.copy_comments,
+            'sendPurchaseOrder': booking.send_purchase_order,
+            'sendQuotationAccess': booking.send_quotation_access,
+            'shareableLink': booking.shareable_link,
+            'paymentDetails': payment_details_data,  # Single payment for backward compatibility
+            'allPayments': payments_data,  # All payments for this booking
+            'bookingOptions': booking_options_data,  # Booking options from payment or booking record
+            'createdBy': created_by_data,
+            'createdAt': booking.created_at,
+            'updatedAt': booking.updated_at,
+        }
+
+        return Response({
+            'success': True,
+            'message': 'Booking data retrieved successfully',
+            'data': booking_data,
+            'shareableLink': link,
+            'timestamp': timezone.now(),
+        }, status=status.HTTP_200_OK)
+
+    except Booking.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Booking not found for the provided shareable link'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        logger.error(f"Error retrieving public booking data for link {link}: {str(e)}")
+        return Response({
+            'success': False,
+            'message': 'Error retrieving booking data',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

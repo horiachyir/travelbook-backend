@@ -18,4 +18,8 @@ urlpatterns = [
     # Get all reservations endpoint - support both with and without trailing slash
     path('', views.get_all_reservations, name='get_all_reservations'),
     re_path(r'^$', views.get_all_reservations, name='get_all_reservations_no_slash'),
+
+    # Public booking endpoint - accessible without authentication
+    path('public/booking/<str:link>/', views.get_public_booking, name='get_public_booking'),
+    re_path(r'^public/booking/(?P<link>.+)/?$', views.get_public_booking, name='get_public_booking_flexible'),
 ]
