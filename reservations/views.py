@@ -819,6 +819,13 @@ def get_public_booking(request, link):
             'booking_tours', 'pricing_breakdown', 'payment_details'
         ).get(shareable_link=link)
 
+        # Check if access is allowed
+        if not booking.send_quotation_access:
+            return Response({
+                'success': False,
+                'message': 'You do not have access to this quote'
+            }, status=status.HTTP_403_FORBIDDEN)
+
         # Customer data
         customer_data = {
             'id': str(booking.customer.id),
