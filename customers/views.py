@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Customer
-from .serializers import CustomerSerializer, CustomerCreateSerializer
+from .serializers import CustomerSerializer, CustomerCreateSerializer, CustomerUpdateSerializer
 
 
 @api_view(['POST'])
@@ -44,7 +44,6 @@ class CustomerListCreateView(generics.ListCreateAPIView):
 
 
 class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = CustomerSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -55,3 +54,27 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
             'bookings__payment_details',
             'reservations'
         ).select_related('created_by')
+
+    def get_serializer_class(self):
+        """Use different serializers for different operations"""
+        if self.request.method in ['PUT', 'PATCH']:
+            return CustomerUpdateSerializer
+        return CustomerSerializer
+
+    def perform_update(self, serializer):
+        """Ensure created_by field is not modified during updates"""
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        """Override update to return full customer data after update"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # Use update serializer for validation and updating
+        update_serializer = CustomerUpdateSerializer(instance, data=request.data, partial=partial)
+        update_serializer.is_valid(raise_exception=True)
+        updated_instance = update_serializer.save()
+
+        # Return full customer data using the read serializer
+        response_serializer = CustomerSerializer(updated_instance)
+        return Response(response_serializer.data)

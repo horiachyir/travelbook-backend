@@ -130,3 +130,23 @@ class CustomerCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # The created_by will be set in the view
         return Customer.objects.create(**validated_data)
+
+
+class CustomerUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating customer data"""
+    class Meta:
+        model = Customer
+        fields = [
+            'name', 'email', 'phone', 'language', 'country',
+            'id_number', 'cpf', 'address', 'company', 'location',
+            'status', 'notes', 'avatar'
+        ]
+        # These fields cannot be updated
+        read_only_fields = ['id', 'created_by', 'total_bookings', 'total_spent', 'last_booking', 'created_at', 'updated_at']
+
+    def update(self, instance, validated_data):
+        # Update only the provided fields
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        return instance

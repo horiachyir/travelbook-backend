@@ -16,11 +16,12 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 # Get ALLOWED_HOSTS from environment variable or use defaults
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# Always include Render domains
+# Always include Render domains and test server
 render_domains = [
     'travelbook-backend.onrender.com',
     '.onrender.com',  # Wildcard for any onrender.com subdomain
-    '.travelbook-backend.onrender.com'  # Wildcard for any subdomain
+    '.travelbook-backend.onrender.com',  # Wildcard for any subdomain
+    'testserver'  # For Django test client
 ]
 
 for domain in render_domains:
