@@ -1,5 +1,8 @@
 from django.db import models
+from django.contrib.auth import get_user_model
 import uuid
+
+User = get_user_model()
 
 
 class Tour(models.Model):
@@ -36,6 +39,7 @@ class Tour(models.Model):
     operating_days = models.JSONField(default=list)
     
     is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tours', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
