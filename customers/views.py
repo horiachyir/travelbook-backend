@@ -25,8 +25,13 @@ class CustomerListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only customers created by the current user
-        return Customer.objects.filter(created_by=self.request.user)
+        # Return only customers created by the current user with all related data
+        return Customer.objects.filter(created_by=self.request.user).prefetch_related(
+            'bookings__booking_tours',
+            'bookings__pricing_breakdown',
+            'bookings__payment_details',
+            'reservations'
+        ).select_related('created_by')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -43,5 +48,10 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only customers created by the current user
-        return Customer.objects.filter(created_by=self.request.user)
+        # Return only customers created by the current user with all related data
+        return Customer.objects.filter(created_by=self.request.user).prefetch_related(
+            'bookings__booking_tours',
+            'bookings__pricing_breakdown',
+            'bookings__payment_details',
+            'reservations'
+        ).select_related('created_by')
