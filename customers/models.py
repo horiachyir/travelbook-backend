@@ -23,7 +23,7 @@ class Customer(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customers', null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='customers', null=True, blank=True)
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=50, blank=True)
