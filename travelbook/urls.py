@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from customers.views import CustomerListCreateView
+from customers.views import CustomerListCreateView, CustomerDetailView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -23,6 +23,8 @@ urlpatterns = [
     path('api/customers/', include('customers.urls')),
     # Handle customers URL without trailing slash - direct view
     path('api/customers', CustomerListCreateView.as_view(), name='customers-no-slash'),
+    # Handle customer detail URL without trailing slash
+    path('api/customers/<uuid:pk>', CustomerDetailView.as_view(), name='customer-detail-no-slash'),
     path('api/commissions/', include('commissions.urls')),
     path('api/logistics/', include('logistics.urls')),
     path('api/reports/', include('reports.urls')),
