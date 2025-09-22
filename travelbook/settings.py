@@ -30,6 +30,9 @@ for domain in render_domains:
 # Strip any whitespace from hosts
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 
+# URL configuration
+APPEND_SLASH = False
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
