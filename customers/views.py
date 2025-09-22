@@ -78,3 +78,19 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
         # Return full customer data using the read serializer
         response_serializer = CustomerSerializer(updated_instance)
         return Response(response_serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to return success message"""
+        instance = self.get_object()
+        customer_name = instance.name
+        customer_id = str(instance.id)
+
+        # Perform the deletion
+        self.perform_destroy(instance)
+
+        # Return success message
+        return Response({
+            "success": True,
+            "message": f"Customer '{customer_name}' has been successfully deleted.",
+            "deleted_customer_id": customer_id
+        }, status=status.HTTP_200_OK)
