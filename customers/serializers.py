@@ -120,15 +120,11 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 
 class CustomerCreateSerializer(serializers.ModelSerializer):
-    fullName = serializers.CharField(source='name')
-    countryOfOrigin = serializers.CharField(source='country')
-    idPassport = serializers.CharField(source='id_number')
-
     class Meta:
         model = Customer
         fields = [
-            'fullName', 'email', 'phone', 'language', 'countryOfOrigin',
-            'idPassport', 'cpf', 'address'
+            'name', 'email', 'phone', 'language', 'country',
+            'id_number', 'cpf', 'address'
         ]
 
     def create(self, validated_data):
