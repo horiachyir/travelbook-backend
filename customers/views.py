@@ -12,7 +12,7 @@ def create_customer(request):
     serializer = CustomerCreateSerializer(data=request.data)
     if serializer.is_valid():
         # Add the current user to the customer
-        customer = serializer.save(user=request.user)
+        customer = serializer.save(created_by=request.user)
 
         # Return the created customer with full details
         response_serializer = CustomerSerializer(customer)
@@ -26,7 +26,7 @@ class CustomerListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         # Return only customers created by the current user
-        return Customer.objects.filter(user=self.request.user)
+        return Customer.objects.filter(created_by=self.request.user)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -34,8 +34,8 @@ class CustomerListCreateView(generics.ListCreateAPIView):
         return CustomerSerializer
 
     def perform_create(self, serializer):
-        # Set the user to the current authenticated user
-        serializer.save(user=self.request.user)
+        # Set the created_by to the current authenticated user
+        serializer.save(created_by=self.request.user)
 
 
 class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -44,4 +44,4 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         # Return only customers created by the current user
-        return Customer.objects.filter(user=self.request.user)
+        return Customer.objects.filter(created_by=self.request.user)

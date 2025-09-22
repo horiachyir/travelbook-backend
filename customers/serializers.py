@@ -6,12 +6,12 @@ class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = [
-            'id', 'user', 'name', 'email', 'phone', 'language', 'country',
+            'id', 'created_by', 'name', 'email', 'phone', 'language', 'country',
             'id_number', 'cpf', 'address', 'company', 'location',
             'status', 'total_bookings', 'total_spent', 'last_booking',
             'notes', 'avatar', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'user', 'total_bookings', 'total_spent', 'last_booking', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'total_bookings', 'total_spent', 'last_booking', 'created_at', 'updated_at']
 
 
 class CustomerCreateSerializer(serializers.ModelSerializer):
@@ -27,5 +27,5 @@ class CustomerCreateSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        # The user will be set in the view
+        # The created_by will be set in the view
         return Customer.objects.create(**validated_data)
