@@ -1,5 +1,7 @@
 from django.urls import path
+from . import views
 
 urlpatterns = [
-    # Add your URLs here
+    path('', views.CustomerListCreateView.as_view(), name='customer-list-create'),
+    path('<uuid:pk>/', views.CustomerDetailView.as_view(), name='customer-detail'),
 ]
