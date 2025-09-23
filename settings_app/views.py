@@ -129,10 +129,55 @@ class SystemSettingsListCreateView(generics.ListCreateAPIView):
         # Check if user already has system settings
         existing_settings = SystemSettings.objects.filter(created_by=self.request.user).first()
         if existing_settings:
-            raise serializers.ValidationError("System settings already exist for this user. Use PUT to update.")
+            # Update existing settings instead of creating new ones
+            update_serializer = SystemSettingsUpdateSerializer(existing_settings, data=self.request.data)
+            update_serializer.is_valid(raise_exception=True)
+            updated_instance = update_serializer.save()
+
+            # Return the updated instance (this will be handled by the framework)
+            serializer.instance = updated_instance
+            return
 
         # Set the created_by to the current authenticated user
         serializer.save(created_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """Override create to handle update-or-create logic"""
+        # Check if user already has system settings
+        existing_settings = SystemSettings.objects.filter(created_by=request.user).first()
+
+        if existing_settings:
+            # Update existing settings
+            update_serializer = SystemSettingsUpdateSerializer(existing_settings, data=request.data)
+            update_serializer.is_valid(raise_exception=True)
+            updated_instance = update_serializer.save()
+
+            # Return updated data using read serializer
+            response_serializer = SystemSettingsSerializer(updated_instance)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        else:
+            # Create new settings
+            create_serializer = SystemSettingsCreateSerializer(data=request.data)
+            create_serializer.is_valid(raise_exception=True)
+            new_instance = create_serializer.save(created_by=request.user)
+
+            # Return created data using read serializer
+            response_serializer = SystemSettingsSerializer(new_instance)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        """Override list to return single most recent settings instead of paginated list"""
+        # Get the most recent system settings for the current user
+        most_recent_settings = SystemSettings.objects.filter(created_by=request.user).first()
+
+        if most_recent_settings:
+            serializer = SystemSettingsSerializer(most_recent_settings)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            # Return empty response if no settings found
+            return Response({
+                "message": "No system settings found for this user."
+            }, status=status.HTTP_200_OK)
 
 
 class SystemSettingsDetailView(generics.RetrieveUpdateDestroyAPIView):
