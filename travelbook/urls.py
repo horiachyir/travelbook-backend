@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from customers.views import CustomerListCreateView, CustomerDetailView
 from tours.views import TourListCreateView, TourDetailView
-from settings_app.views import DestinationListCreateView, DestinationDetailView
+from settings_app.views import DestinationListCreateView, DestinationDetailView, SystemSettingsListCreateView, SystemSettingsDetailView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -38,6 +38,10 @@ urlpatterns = [
     path('api/settings/destinations', DestinationListCreateView.as_view(), name='destinations-no-slash'),
     # Handle destination detail URL without trailing slash
     path('api/settings/destinations/<uuid:pk>', DestinationDetailView.as_view(), name='destination-detail-no-slash'),
+    # Handle settings system URL without trailing slash
+    path('api/settings/system', SystemSettingsListCreateView.as_view(), name='system-settings-no-slash'),
+    # Handle system settings detail URL without trailing slash
+    path('api/settings/system/<uuid:pk>', SystemSettingsDetailView.as_view(), name='system-settings-detail-no-slash'),
     path('api/settings/', include('settings_app.urls')),
     path('api/support/', include('support.urls')),
 ]

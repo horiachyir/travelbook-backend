@@ -38,3 +38,40 @@ class Destination(models.Model):
 
     def __str__(self):
         return f"{self.name}, {self.country}"
+
+
+class SystemSettings(models.Model):
+    """System-wide settings for the application"""
+
+    CURRENCY_CHOICES = [
+        ('USD', 'US Dollar'),
+        ('EUR', 'Euro'),
+        ('GBP', 'British Pound'),
+        ('BRL', 'Brazilian Real'),
+        ('ARS', 'Argentine Peso'),
+        ('COP', 'Colombian Peso'),
+        ('PEN', 'Peruvian Sol'),
+        ('CLP', 'Chilean Peso'),
+        ('JPY', 'Japanese Yen'),
+        ('CAD', 'Canadian Dollar'),
+        ('AUD', 'Australian Dollar'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    base_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD')
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # Percentage
+    payment_methods = models.JSONField(default=dict)  # Store payment methods as JSON
+    payment_terms = models.IntegerField(default=30)  # Days
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)  # Percentage
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='system_settings', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'settings_system'
+        ordering = ['-created_at']
+        # Ensure only one settings record per user (or globally)
+        unique_together = ['created_by']
+
+    def __str__(self):
+        return f"System Settings - {self.base_currency} - {self.commission_rate}%"
