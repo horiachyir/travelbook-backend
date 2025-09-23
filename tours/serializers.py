@@ -55,14 +55,31 @@ class TourSerializer(serializers.ModelSerializer):
 class TourUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating tours"""
 
+    # Map frontend field names to model field names (same as create serializer)
+    adultPrice = serializers.DecimalField(source='adult_price', max_digits=10, decimal_places=2)
+    childPrice = serializers.DecimalField(source='child_price', max_digits=10, decimal_places=2)
+    departureTime = serializers.TimeField(source='departure_time')
+    startingPoint = serializers.CharField(source='starting_point', allow_blank=True, required=False)
+    destination = serializers.UUIDField()  # UUID field for destination FK
+
     class Meta:
         model = Tour
         fields = [
-            'name', 'destination', 'description', 'adult_price', 'child_price',
-            'currency', 'starting_point', 'departure_time', 'capacity', 'active'
+            'name', 'description', 'destination', 'active', 'adultPrice',
+            'childPrice', 'departureTime', 'startingPoint', 'capacity', 'currency'
         ]
 
     def update(self, instance, validated_data):
+        # Convert destination UUID to Destination instance if provided
+        if 'destination' in validated_data:
+            destination_id = validated_data.pop('destination')
+            try:
+                destination = Destination.objects.get(id=destination_id)
+                validated_data['destination'] = destination
+            except Destination.DoesNotExist:
+                raise serializers.ValidationError({"destination": "Invalid destination ID"})
+
+        # Update fields
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save()
