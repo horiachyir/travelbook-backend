@@ -26,8 +26,8 @@ class TourListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only tours created by the current user
-        return Tour.objects.filter(created_by=self.request.user).select_related('created_by')
+        # Return only tours created by the current user with destination data
+        return Tour.objects.filter(created_by=self.request.user).select_related('created_by', 'destination')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -43,8 +43,8 @@ class TourDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only tours created by the current user
-        return Tour.objects.filter(created_by=self.request.user).select_related('created_by')
+        # Return only tours created by the current user with destination data
+        return Tour.objects.filter(created_by=self.request.user).select_related('created_by', 'destination')
 
     def get_serializer_class(self):
         """Use different serializers for different operations"""

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Tour
 from settings_app.models import Destination
+from settings_app.serializers import DestinationSerializer
 
 
 class TourCreateSerializer(serializers.ModelSerializer):
@@ -38,17 +39,17 @@ class TourCreateSerializer(serializers.ModelSerializer):
 class TourSerializer(serializers.ModelSerializer):
     """Full tour serializer for read operations"""
 
-    destination_name = serializers.CharField(source='destination.name', read_only=True)
+    destination = DestinationSerializer(read_only=True)
 
     class Meta:
         model = Tour
         fields = [
-            'id', 'name', 'destination', 'destination_name', 'description',
+            'id', 'name', 'destination', 'description',
             'adult_price', 'child_price', 'currency', 'starting_point',
             'departure_time', 'capacity', 'active', 'created_by',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at', 'destination_name']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
 
 class TourUpdateSerializer(serializers.ModelSerializer):
