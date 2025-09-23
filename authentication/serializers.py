@@ -12,10 +12,9 @@ class SignUpSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ('email', 'fullName', 'password', 'confirm_password', 'phone', 'company')
+        fields = ('email', 'fullName', 'password', 'confirm_password', 'phone')
         extra_kwargs = {
-            'phone': {'required': False},
-            'company': {'required': False}
+            'phone': {'required': False}
         }
     
     def validate(self, attrs):
@@ -32,8 +31,7 @@ class SignUpSerializer(serializers.ModelSerializer):
             email=validated_data['email'],
             full_name=validated_data['full_name'],
             password=password,
-            phone=validated_data.get('phone'),
-            company=validated_data.get('company')
+            phone=validated_data.get('phone')
         )
         return user
 
@@ -64,8 +62,8 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ('id', 'email', 'fullName', 'phone', 'company', 'isVerified', 
-                  'dateJoined', 'avatar', 'bio', 'language', 'timezone')
+        fields = ('id', 'email', 'fullName', 'phone', 'isVerified',
+                  'dateJoined', 'avatar', 'language', 'timezone')
         read_only_fields = ('id', 'email', 'dateJoined', 'isVerified')
 
 

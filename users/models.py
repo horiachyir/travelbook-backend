@@ -32,7 +32,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, blank=True, null=True)
-    company = models.CharField(max_length=255, blank=True, null=True)
     
     # User status
     is_active = models.BooleanField(default=True)
@@ -46,12 +45,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     # Profile fields
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
-    bio = models.TextField(blank=True, null=True)
     language = models.CharField(max_length=10, default='en')
     timezone = models.CharField(max_length=50, default='UTC')
     
-    # OAuth fields
-    google_id = models.CharField(max_length=255, blank=True, null=True)
     
     # Password reset
     reset_password_token = models.CharField(max_length=255, blank=True, null=True)
