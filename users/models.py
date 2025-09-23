@@ -47,6 +47,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     language = models.CharField(max_length=10, default='en')
     timezone = models.CharField(max_length=50, default='UTC')
+
+    # User role and business fields
+    role = models.CharField(max_length=255, blank=True, null=True)
+    commission = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=255, blank=True, null=True)
     
     
     # Password reset

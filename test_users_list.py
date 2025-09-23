@@ -30,6 +30,9 @@ def test_get_users_list():
             full_name="Regular User One",
             password="TestPassword123!",
             phone="+1111111111",
+            role="Agent",
+            commission="5.0",
+            status="Active",
             is_superuser=False
         )
 
@@ -38,6 +41,9 @@ def test_get_users_list():
             full_name="Regular User Two",
             password="TestPassword123!",
             phone="+2222222222",
+            role="Manager",
+            commission="10.0",
+            status="Inactive",
             is_superuser=False
         )
 
@@ -96,10 +102,13 @@ def test_get_users_list():
                 print(f"    Email: {user_data.get('email')}")
                 print(f"    Full Name: {user_data.get('full_name')}")
                 print(f"    Phone: {user_data.get('phone')}")
+                print(f"    Role: {user_data.get('role')}")
+                print(f"    Commission: {user_data.get('commission')}")
+                print(f"    Status: {user_data.get('status')}")
                 print()
 
                 # Check field structure
-                expected_fields = ['id', 'email', 'full_name', 'phone']
+                expected_fields = ['id', 'email', 'full_name', 'phone', 'role', 'commission', 'status']
                 actual_fields = list(user_data.keys())
 
                 if set(actual_fields) != set(expected_fields):
@@ -173,7 +182,7 @@ if __name__ == "__main__":
     if list_success and auth_success:
         print("\n🎉 GET /api/users/ endpoint working correctly!")
         print("✅ Returns non-superuser users only (is_superuser=False)")
-        print("✅ Includes correct fields: id, email, full_name, phone")
+        print("✅ Includes correct fields: id, email, full_name, phone, role, commission, status")
         print("✅ Filters out superusers")
         print("✅ Requires authentication")
         print("✅ Orders users by email")
