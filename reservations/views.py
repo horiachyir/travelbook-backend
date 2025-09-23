@@ -174,7 +174,6 @@ def create_booking(request):
                         'email': booking.created_by.email,
                         'fullName': booking.created_by.full_name,
                         'phone': booking.created_by.phone,
-                        'company': booking.created_by.company,
                     }
 
                 # Compile complete booking data
@@ -727,7 +726,6 @@ def get_all_reservations(request):
                     'email': booking.created_by.email,
                     'fullName': booking.created_by.full_name,
                     'phone': booking.created_by.phone,
-                    'company': booking.created_by.company,
                 }
 
             # Compile complete booking data
@@ -955,7 +953,6 @@ def get_public_booking(request, link):
                 'email': booking.created_by.email,
                 'fullName': booking.created_by.full_name,
                 'phone': booking.created_by.phone,
-                'company': booking.created_by.company,
             }
 
         # Compile complete booking data
