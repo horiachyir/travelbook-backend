@@ -4,8 +4,19 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from authentication.serializers import UserSerializer, ChangePasswordSerializer
+from .serializers import UserListSerializer
 
 User = get_user_model()
+
+
+class UserListView(generics.ListAPIView):
+    """List all non-superuser users"""
+    serializer_class = UserListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return only non-superuser users (is_superuser=False)
+        return User.objects.filter(is_superuser=False).order_by('email')
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
