@@ -2,10 +2,11 @@ from rest_framework import status, generics, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Destination, SystemSettings
+from .models import Destination, SystemSettings, Vehicle
 from .serializers import (
     DestinationSerializer, DestinationCreateSerializer, DestinationUpdateSerializer,
-    SystemSettingsSerializer, SystemSettingsCreateSerializer, SystemSettingsUpdateSerializer
+    SystemSettingsSerializer, SystemSettingsCreateSerializer, SystemSettingsUpdateSerializer,
+    VehicleSerializer, VehicleCreateSerializer
 )
 
 
@@ -225,3 +226,23 @@ class SystemSettingsDetailView(generics.RetrieveUpdateDestroyAPIView):
             "message": "System settings have been successfully deleted.",
             "deleted_settings_id": settings_id
         }, status=status.HTTP_200_OK)
+
+
+class VehicleCreateView(generics.CreateAPIView):
+    """Create new vehicles for POST /api/settings/vehicle/"""
+    serializer_class = VehicleCreateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        """Create a new vehicle with the provided data"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vehicle = serializer.save(created_by=request.user)
+
+        # Return the created vehicle data using the full serializer
+        response_serializer = VehicleSerializer(vehicle)
+        return Response({
+            'success': True,
+            'message': 'Vehicle created successfully',
+            'data': response_serializer.data
+        }, status=status.HTTP_201_CREATED)

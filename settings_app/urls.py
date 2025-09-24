@@ -9,4 +9,7 @@ urlpatterns = [
     # System settings endpoints
     path('system/', views.SystemSettingsListCreateView.as_view(), name='system-settings-list-create'),
     path('system/<uuid:pk>/', views.SystemSettingsDetailView.as_view(), name='system-settings-detail'),
+
+    # Vehicle endpoints
+    path('vehicle/', views.VehicleCreateView.as_view(), name='vehicle-create'),
 ]

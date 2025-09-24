@@ -75,3 +75,26 @@ class SystemSettings(models.Model):
 
     def __str__(self):
         return f"System Settings - {self.base_currency} - {self.commission_rate}%"
+
+
+class Vehicle(models.Model):
+    """Vehicle settings for the application"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    brand = models.CharField(max_length=255)
+    capacity = models.IntegerField()
+    external_vehicle = models.BooleanField(default=False)
+    license_plate = models.CharField(max_length=255)
+    model = models.CharField(max_length=255)
+    status = models.BooleanField(default=True)
+    vehicle_name = models.CharField(max_length=255)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='vehicles', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'settings_vehicles'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.vehicle_name} - {self.brand} {self.model} ({self.license_plate})"

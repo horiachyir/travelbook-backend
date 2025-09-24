@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Destination, SystemSettings
+from .models import Destination, SystemSettings, Vehicle
 
 
 class DestinationCreateSerializer(serializers.ModelSerializer):
@@ -176,3 +176,57 @@ class SystemSettingsUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"Payment method '{method}' must be true or false")
 
         return value
+
+
+class VehicleCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating vehicles with frontend data structure"""
+
+    class Meta:
+        model = Vehicle
+        fields = ['brand', 'capacity', 'external_vehicle', 'license_plate', 'model', 'status', 'vehicle_name']
+
+    def create(self, validated_data):
+        # The created_by will be set in the view
+        return Vehicle.objects.create(**validated_data)
+
+    def validate_capacity(self, value):
+        """Validate capacity is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Vehicle capacity must be greater than 0")
+        return value
+
+    def validate_license_plate(self, value):
+        """Validate license plate is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("License plate cannot be empty")
+        return value.strip()
+
+    def validate_vehicle_name(self, value):
+        """Validate vehicle name is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Vehicle name cannot be empty")
+        return value.strip()
+
+    def validate_brand(self, value):
+        """Validate brand is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Vehicle brand cannot be empty")
+        return value.strip()
+
+    def validate_model(self, value):
+        """Validate model is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Vehicle model cannot be empty")
+        return value.strip()
+
+
+class VehicleSerializer(serializers.ModelSerializer):
+    """Full vehicle serializer for read operations"""
+
+    class Meta:
+        model = Vehicle
+        fields = [
+            'id', 'brand', 'capacity', 'external_vehicle', 'license_plate', 'model',
+            'status', 'vehicle_name', 'created_by', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
