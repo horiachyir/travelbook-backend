@@ -41,6 +41,28 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return value
 
 
+class UserUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating users via PUT /api/users/{id}/"""
+
+    class Meta:
+        model = User
+        fields = ['email', 'full_name', 'phone', 'role', 'commission', 'status']
+
+    def validate_email(self, value):
+        """Validate that email is unique (excluding current user)"""
+        instance = self.instance
+        if User.objects.filter(email=value).exclude(pk=instance.pk).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def update(self, instance, validated_data):
+        """Update user fields"""
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        return instance
+
+
 class UserListSerializer(serializers.ModelSerializer):
     """Serializer for listing users (non-superusers only)"""
 

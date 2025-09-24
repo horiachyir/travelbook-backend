@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from authentication.serializers import UserSerializer, ChangePasswordSerializer
-from .serializers import UserListSerializer, UserCreateSerializer
+from .serializers import UserListSerializer, UserCreateSerializer, UserUpdateSerializer
 
 User = get_user_model()
 
@@ -35,6 +35,54 @@ class UserListCreateView(generics.ListCreateAPIView):
             'message': 'User created successfully',
             'data': response_serializer.data
         }, status=status.HTTP_201_CREATED)
+
+
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a specific user"""
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return only non-superuser users
+        return User.objects.filter(is_superuser=False)
+
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return UserUpdateSerializer
+        return UserListSerializer
+
+    def update(self, request, *args, **kwargs):
+        """Override update to return success message with updated user data"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # Use update serializer for validation and updating
+        update_serializer = UserUpdateSerializer(instance, data=request.data, partial=partial)
+        update_serializer.is_valid(raise_exception=True)
+        updated_instance = update_serializer.save()
+
+        # Return full user data using the list serializer
+        response_serializer = UserListSerializer(updated_instance)
+        return Response({
+            'success': True,
+            'message': 'User updated successfully',
+            'data': response_serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to return success message"""
+        instance = self.get_object()
+        user_email = instance.email
+        user_id = str(instance.id)
+
+        # Perform the deletion
+        self.perform_destroy(instance)
+
+        # Return success message
+        return Response({
+            "success": True,
+            "message": f"User '{user_email}' has been successfully deleted.",
+            "deleted_user_id": user_id
+        }, status=status.HTTP_200_OK)
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):

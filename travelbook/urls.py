@@ -6,6 +6,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from customers.views import CustomerListCreateView, CustomerDetailView
 from tours.views import TourListCreateView, TourDetailView, DestinationsWithToursView
 from settings_app.views import DestinationListCreateView, DestinationDetailView, SystemSettingsListCreateView, SystemSettingsDetailView
+from users.views import UserDetailView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -29,6 +30,8 @@ urlpatterns = [
     path('api/customers', CustomerListCreateView.as_view(), name='customers-no-slash'),
     # Handle customer detail URL without trailing slash
     path('api/customers/<uuid:pk>', CustomerDetailView.as_view(), name='customer-detail-no-slash'),
+    # Handle user detail URL without trailing slash
+    path('api/users/<uuid:pk>', UserDetailView.as_view(), name='user-detail-no-slash'),
     # Handle tours URL without trailing slash - direct view
     path('api/tours', TourListCreateView.as_view(), name='tours-no-slash'),
     # Handle tour detail URL without trailing slash
