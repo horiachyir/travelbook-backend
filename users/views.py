@@ -4,19 +4,37 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from authentication.serializers import UserSerializer, ChangePasswordSerializer
-from .serializers import UserListSerializer
+from .serializers import UserListSerializer, UserCreateSerializer
 
 User = get_user_model()
 
 
-class UserListView(generics.ListAPIView):
-    """List all non-superuser users"""
-    serializer_class = UserListSerializer
+class UserListCreateView(generics.ListCreateAPIView):
+    """List all non-superuser users and create new users"""
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         # Return only non-superuser users (is_superuser=False)
         return User.objects.filter(is_superuser=False).order_by('email')
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return UserCreateSerializer
+        return UserListSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create a new user with the provided data"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        # Return the created user data using the list serializer
+        response_serializer = UserListSerializer(user)
+        return Response({
+            'success': True,
+            'message': 'User created successfully',
+            'data': response_serializer.data
+        }, status=status.HTTP_201_CREATED)
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
