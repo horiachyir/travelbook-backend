@@ -228,10 +228,22 @@ class SystemSettingsDetailView(generics.RetrieveUpdateDestroyAPIView):
         }, status=status.HTTP_200_OK)
 
 
-class VehicleCreateView(generics.CreateAPIView):
-    """Create new vehicles for POST /api/settings/vehicle/"""
-    serializer_class = VehicleCreateSerializer
+class VehicleListCreateView(generics.ListCreateAPIView):
+    """Handle GET and POST requests for /api/settings/vehicle/"""
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return only vehicles created by the current user
+        return Vehicle.objects.filter(created_by=self.request.user).select_related('created_by')
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return VehicleCreateSerializer
+        return VehicleSerializer
+
+    def perform_create(self, serializer):
+        # Set the created_by to the current authenticated user
+        serializer.save(created_by=self.request.user)
 
     def create(self, request, *args, **kwargs):
         """Create a new vehicle with the provided data"""
@@ -246,3 +258,7 @@ class VehicleCreateView(generics.CreateAPIView):
             'message': 'Vehicle created successfully',
             'data': response_serializer.data
         }, status=status.HTTP_201_CREATED)
+
+
+# Keep the old name for backward compatibility
+VehicleCreateView = VehicleListCreateView
