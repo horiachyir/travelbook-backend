@@ -84,3 +84,33 @@ class TourUpdateSerializer(serializers.ModelSerializer):
             setattr(instance, field, value)
         instance.save()
         return instance
+
+
+class TourBasicSerializer(serializers.ModelSerializer):
+    """Basic tour serializer without destination details to avoid circular references"""
+
+    class Meta:
+        model = Tour
+        fields = [
+            'id', 'name', 'description', 'adult_price', 'child_price',
+            'currency', 'starting_point', 'departure_time', 'capacity',
+            'active', 'created_at', 'updated_at'
+        ]
+
+
+class DestinationWithToursSerializer(serializers.ModelSerializer):
+    """Serializer for destinations with associated tours data"""
+
+    tours = TourBasicSerializer(many=True, read_only=True)
+    tours_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Destination
+        fields = [
+            'id', 'name', 'country', 'region', 'language', 'status',
+            'created_at', 'updated_at', 'tours', 'tours_count'
+        ]
+
+    def get_tours_count(self, obj):
+        """Return the number of tours for this destination"""
+        return obj.tours.count()

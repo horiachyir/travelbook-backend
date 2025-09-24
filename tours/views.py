@@ -3,7 +3,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Tour
-from .serializers import TourSerializer, TourCreateSerializer, TourUpdateSerializer
+from .serializers import TourSerializer, TourCreateSerializer, TourUpdateSerializer, DestinationWithToursSerializer
+from settings_app.models import Destination
 
 
 @api_view(['POST'])
@@ -84,4 +85,45 @@ class TourDetailView(generics.RetrieveUpdateDestroyAPIView):
             "success": True,
             "message": f"Tour '{tour_name}' has been successfully deleted.",
             "deleted_tour_id": tour_id
+        }, status=status.HTTP_200_OK)
+
+
+class DestinationsWithToursView(generics.ListAPIView):
+    """
+    GET /api/destinations/ - Retrieve all destinations with their associated tours data.
+
+    This endpoint joins data from both destinations and tours tables, returning:
+    - All destination information
+    - All tours associated with each destination
+    - Total count of tours per destination
+
+    No user filtering - returns all data regardless of who created it.
+    """
+    serializer_class = DestinationWithToursSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return ALL destinations with their related tours, regardless of user
+        return Destination.objects.all().prefetch_related('tours').order_by('name')
+
+    def list(self, request, *args, **kwargs):
+        """Override list to provide additional statistics"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+
+        # Calculate statistics
+        total_destinations = queryset.count()
+        total_tours = Tour.objects.count()
+        active_destinations = queryset.filter(status='active').count()
+
+        return Response({
+            'success': True,
+            'message': f'Retrieved {total_destinations} destinations with tours data',
+            'data': serializer.data,
+            'statistics': {
+                'total_destinations': total_destinations,
+                'active_destinations': active_destinations,
+                'total_tours': total_tours,
+            },
+            'count': total_destinations,
         }, status=status.HTTP_200_OK)

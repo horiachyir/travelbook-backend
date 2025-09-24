@@ -4,7 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from customers.views import CustomerListCreateView, CustomerDetailView
-from tours.views import TourListCreateView, TourDetailView
+from tours.views import TourListCreateView, TourDetailView, DestinationsWithToursView
 from settings_app.views import DestinationListCreateView, DestinationDetailView, SystemSettingsListCreateView, SystemSettingsDetailView
 
 urlpatterns = [
@@ -18,6 +18,8 @@ urlpatterns = [
     # API Endpoints
     path('api/auth/', include('authentication.urls')),
     path('api/users/', include('users.urls')),
+    path('api/destinations/', DestinationsWithToursView.as_view(), name='destinations-with-tours'),
+    path('api/destinations', DestinationsWithToursView.as_view(), name='destinations-with-tours-no-slash'),
     path('api/quotes/', include('quotes.urls')),
     path('api/tours/', include('tours.urls')),
     path('api/reservations/', include('reservations.urls')),
