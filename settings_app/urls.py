@@ -12,4 +12,5 @@ urlpatterns = [
 
     # Vehicle endpoints
     path('vehicle/', views.VehicleListCreateView.as_view(), name='vehicle-list-create'),
+    path('vehicle/<uuid:pk>/', views.VehicleDetailView.as_view(), name='vehicle-detail'),
 ]

@@ -230,3 +230,47 @@ class VehicleSerializer(serializers.ModelSerializer):
             'status', 'vehicle_name', 'created_by', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+
+class VehicleUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating vehicles"""
+
+    class Meta:
+        model = Vehicle
+        fields = ['brand', 'capacity', 'external_vehicle', 'license_plate', 'model', 'status', 'vehicle_name']
+
+    def update(self, instance, validated_data):
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        return instance
+
+    def validate_capacity(self, value):
+        """Validate capacity is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Vehicle capacity must be greater than 0")
+        return value
+
+    def validate_license_plate(self, value):
+        """Validate license plate is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("License plate cannot be empty")
+        return value.strip()
+
+    def validate_vehicle_name(self, value):
+        """Validate vehicle name is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Vehicle name cannot be empty")
+        return value.strip()
+
+    def validate_brand(self, value):
+        """Validate brand is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Vehicle brand cannot be empty")
+        return value.strip()
+
+    def validate_model(self, value):
+        """Validate model is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Vehicle model cannot be empty")
+        return value.strip()

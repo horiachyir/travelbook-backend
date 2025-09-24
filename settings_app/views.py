@@ -6,7 +6,7 @@ from .models import Destination, SystemSettings, Vehicle
 from .serializers import (
     DestinationSerializer, DestinationCreateSerializer, DestinationUpdateSerializer,
     SystemSettingsSerializer, SystemSettingsCreateSerializer, SystemSettingsUpdateSerializer,
-    VehicleSerializer, VehicleCreateSerializer
+    VehicleSerializer, VehicleCreateSerializer, VehicleUpdateSerializer
 )
 
 
@@ -262,3 +262,52 @@ class VehicleListCreateView(generics.ListCreateAPIView):
 
 # Keep the old name for backward compatibility
 VehicleCreateView = VehicleListCreateView
+
+
+class VehicleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Handle GET, PUT, PATCH, DELETE for /api/settings/vehicle/{id}/"""
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Return only vehicles created by the current user
+        return Vehicle.objects.filter(created_by=self.request.user).select_related('created_by')
+
+    def get_serializer_class(self):
+        """Use different serializers for different operations"""
+        if self.request.method in ['PUT', 'PATCH']:
+            return VehicleUpdateSerializer
+        return VehicleSerializer
+
+    def perform_update(self, serializer):
+        """Ensure created_by field is not modified during updates"""
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        """Override update to return full vehicle data after update"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # Use update serializer for validation and updating
+        update_serializer = VehicleUpdateSerializer(instance, data=request.data, partial=partial)
+        update_serializer.is_valid(raise_exception=True)
+        updated_instance = update_serializer.save()
+
+        # Return full vehicle data using the read serializer
+        response_serializer = VehicleSerializer(updated_instance)
+        return Response(response_serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to return success message"""
+        instance = self.get_object()
+        vehicle_name = instance.vehicle_name
+        vehicle_id = str(instance.id)
+
+        # Perform the deletion
+        self.perform_destroy(instance)
+
+        # Return success message
+        return Response({
+            "success": True,
+            "message": f"Vehicle '{vehicle_name}' has been successfully deleted.",
+            "deleted_vehicle_id": vehicle_id
+        }, status=status.HTTP_200_OK)
