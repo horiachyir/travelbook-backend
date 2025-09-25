@@ -111,9 +111,9 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'id', 'created_by', 'name', 'email', 'phone', 'language', 'country',
-            'id_number', 'cpf', 'address', 'company', 'location',
+            'id_number', 'cpf', 'address',
             'status', 'total_bookings', 'total_spent', 'last_booking',
-            'notes', 'avatar', 'created_at', 'updated_at',
+            'created_at', 'updated_at',
             'bookings', 'reservations'
         ]
         read_only_fields = ['id', 'created_by', 'total_bookings', 'total_spent', 'last_booking', 'created_at', 'updated_at']
@@ -138,8 +138,8 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'name', 'email', 'phone', 'language', 'country',
-            'id_number', 'cpf', 'address', 'company', 'location',
-            'status', 'notes', 'avatar'
+            'id_number', 'cpf', 'address',
+            'status'
         ]
         # These fields cannot be updated
         read_only_fields = ['id', 'created_by', 'total_bookings', 'total_spent', 'last_booking', 'created_at', 'updated_at']

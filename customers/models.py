@@ -32,16 +32,11 @@ class Customer(models.Model):
     id_number = models.CharField(max_length=100, blank=True, help_text="ID Number or Document Number")
     cpf = models.CharField(max_length=20, blank=True, help_text="Brazilian CPF if applicable")
     address = models.TextField(blank=True)
-    company = models.CharField(max_length=255, blank=True)
-    location = models.CharField(max_length=255, blank=True)
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     total_bookings = models.IntegerField(default=0)
     total_spent = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     last_booking = models.DateField(null=True, blank=True)
-    
-    notes = models.TextField(blank=True)
-    avatar = models.URLField(blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
