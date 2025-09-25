@@ -32,6 +32,9 @@ class Customer(models.Model):
     id_number = models.CharField(max_length=100, blank=True, help_text="ID Number or Document Number")
     cpf = models.CharField(max_length=20, blank=True, help_text="Brazilian CPF if applicable")
     address = models.TextField(blank=True)
+    hotel = models.CharField(max_length=255, blank=True)
+    room = models.CharField(max_length=100, blank=True)
+    comments = models.TextField(blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     total_bookings = models.IntegerField(default=0)

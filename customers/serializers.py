@@ -111,7 +111,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'id', 'created_by', 'name', 'email', 'phone', 'language', 'country',
-            'id_number', 'cpf', 'address',
+            'id_number', 'cpf', 'address', 'hotel', 'room', 'comments',
             'status', 'total_bookings', 'total_spent', 'last_booking',
             'created_at', 'updated_at',
             'bookings', 'reservations'
@@ -124,7 +124,7 @@ class CustomerCreateSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'name', 'email', 'phone', 'language', 'country',
-            'id_number', 'cpf', 'address'
+            'id_number', 'cpf', 'address', 'hotel', 'room', 'comments'
         ]
 
     def create(self, validated_data):
@@ -138,7 +138,7 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'name', 'email', 'phone', 'language', 'country',
-            'id_number', 'cpf', 'address',
+            'id_number', 'cpf', 'address', 'hotel', 'room', 'comments',
             'status'
         ]
         # These fields cannot be updated
