@@ -82,6 +82,7 @@ class BookingSerializer(serializers.Serializer):
                 'id_number': customer_data.get('idNumber', ''),
                 'cpf': customer_data.get('cpf', ''),
                 'address': customer_data.get('address', ''),
+                'created_by': self.context['request'].user,
             }
         )
         
