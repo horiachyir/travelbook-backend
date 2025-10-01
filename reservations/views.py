@@ -56,7 +56,6 @@ def create_booking(request):
                     'idNumber': booking.customer.id_number,
                     'cpf': booking.customer.cpf,
                     'address': booking.customer.address,
-                    'location': booking.customer.location,
                     'status': booking.customer.status,
                     'totalBookings': booking.customer.total_bookings,
                     'totalSpent': float(booking.customer.total_spent),
