@@ -27,7 +27,7 @@ class Booking(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
     # Customer information
-    customer = models.ForeignKey('customers.Customer', on_delete=models.PROTECT, related_name='bookings')
+    customer = models.ForeignKey('customers.Customer', on_delete=models.CASCADE, related_name='bookings')
     
     # Tour details (summary information)
     destination = models.CharField(max_length=255)
@@ -227,7 +227,7 @@ class Reservation(models.Model):
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     
     # Client
-    customer = models.ForeignKey('customers.Customer', on_delete=models.PROTECT, related_name='reservations')
+    customer = models.ForeignKey('customers.Customer', on_delete=models.CASCADE, related_name='reservations')
     
     # Tour
     tour = models.ForeignKey('tours.Tour', on_delete=models.PROTECT, related_name='reservations')
