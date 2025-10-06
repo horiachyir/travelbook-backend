@@ -787,6 +787,102 @@ def get_all_reservations(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_basic_data(request):
+    """
+    Retrieve basic data from users and tours tables for frontend.
+
+    GET /api/reservations/basic/
+
+    This endpoint returns:
+    - All users from the 'users' table, excluding superusers and administrators
+    - All tours from the 'tours' table
+
+    No user filtering is applied - returns all data stored in the database.
+    Excludes users where is_superuser=True OR role='administrator'.
+    """
+    try:
+        from django.contrib.auth import get_user_model
+        from tours.models import Tour
+
+        User = get_user_model()
+
+        # Get all users except superusers and administrators
+        users = User.objects.exclude(
+            models.Q(is_superuser=True) | models.Q(role='administrator')
+        ).order_by('-date_joined')
+
+        # Get all tours
+        tours = Tour.objects.all().order_by('-created_at')
+
+        # Serialize users data
+        users_data = []
+        for user in users:
+            users_data.append({
+                'id': str(user.id),
+                'email': user.email,
+                'fullName': user.full_name,
+                'phone': user.phone,
+                'isActive': user.is_active,
+                'isStaff': user.is_staff,
+                'isVerified': user.is_verified,
+                'role': user.role,
+                'commission': user.commission,
+                'status': user.status,
+                'language': user.language,
+                'timezone': user.timezone,
+                'dateJoined': user.date_joined,
+                'lastLogin': user.last_login,
+                'updatedAt': user.updated_at,
+            })
+
+        # Serialize tours data
+        tours_data = []
+        for tour in tours:
+            tours_data.append({
+                'id': str(tour.id),
+                'name': tour.name,
+                'destination': {
+                    'id': str(tour.destination.id),
+                    'name': tour.destination.name,
+                } if tour.destination else None,
+                'description': tour.description,
+                'adultPrice': float(tour.adult_price),
+                'childPrice': float(tour.child_price),
+                'currency': tour.currency,
+                'startingPoint': tour.starting_point,
+                'departureTime': tour.departure_time,
+                'capacity': tour.capacity,
+                'active': tour.active,
+                'createdBy': str(tour.created_by.id) if tour.created_by else None,
+                'createdAt': tour.created_at,
+                'updatedAt': tour.updated_at,
+            })
+
+        return Response({
+            'success': True,
+            'message': f'Retrieved {len(users_data)} users and {len(tours_data)} tours successfully',
+            'data': {
+                'users': users_data,
+                'tours': tours_data,
+            },
+            'statistics': {
+                'totalUsers': len(users_data),
+                'totalTours': len(tours_data),
+            },
+            'timestamp': timezone.now(),
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error retrieving basic data: {str(e)}")
+        return Response({
+            'success': False,
+            'message': 'Error retrieving basic data',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def get_public_booking(request, link):
     """

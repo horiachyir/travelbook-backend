@@ -15,6 +15,10 @@ urlpatterns = [
 
     path('bookings/', views.get_bookings, name='get_bookings'),
 
+    # Basic data endpoint - get users and tours (must come before empty path)
+    path('basic/', views.get_basic_data, name='get_basic_data'),
+    re_path(r'^basic/?$', views.get_basic_data, name='get_basic_data_no_slash'),
+
     # Get all reservations endpoint - support both with and without trailing slash
     path('', views.get_all_reservations, name='get_all_reservations'),
     re_path(r'^$', views.get_all_reservations, name='get_all_reservations_no_slash'),
