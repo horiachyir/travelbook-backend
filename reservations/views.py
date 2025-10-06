@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from .models import Booking, BookingTour, BookingPayment, BookingPricingBreakdown
 from .serializers import BookingSerializer
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 import logging
 
@@ -809,7 +810,7 @@ def get_basic_data(request):
 
         # Get all users except superusers and administrators
         users = User.objects.exclude(
-            models.Q(is_superuser=True) | models.Q(role='administrator')
+            Q(is_superuser=True) | Q(role='administrator')
         ).order_by('-date_joined')
 
         # Get all tours
