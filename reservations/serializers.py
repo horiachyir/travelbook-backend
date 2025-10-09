@@ -313,6 +313,47 @@ class BookingSerializer(serializers.Serializer):
                     total=breakdown_item['total'],
                     created_by=self.context['request'].user
                 )
+        # If tours data is provided but pricing breakdown is not, regenerate pricing breakdown from tours
+        elif tours_data is not None:
+            # Delete existing pricing breakdown
+            BookingPricingBreakdown.objects.filter(booking=instance).delete()
+
+            # Regenerate pricing breakdown from tours data
+            for tour_data in tours_data:
+                tour_name = tour_data['tourName']
+
+                # Create pricing breakdown for adults if any
+                if tour_data.get('adultPax', 0) > 0:
+                    BookingPricingBreakdown.objects.create(
+                        booking=instance,
+                        item=f"{tour_name} - Adult",
+                        quantity=tour_data['adultPax'],
+                        unit_price=tour_data['adultPrice'],
+                        total=tour_data['adultPax'] * tour_data['adultPrice'],
+                        created_by=self.context['request'].user
+                    )
+
+                # Create pricing breakdown for children if any
+                if tour_data.get('childPax', 0) > 0:
+                    BookingPricingBreakdown.objects.create(
+                        booking=instance,
+                        item=f"{tour_name} - Child",
+                        quantity=tour_data['childPax'],
+                        unit_price=tour_data['childPrice'],
+                        total=tour_data['childPax'] * tour_data['childPrice'],
+                        created_by=self.context['request'].user
+                    )
+
+                # Create pricing breakdown for infants if any
+                if tour_data.get('infantPax', 0) > 0:
+                    BookingPricingBreakdown.objects.create(
+                        booking=instance,
+                        item=f"{tour_name} - Infant",
+                        quantity=tour_data['infantPax'],
+                        unit_price=tour_data['infantPrice'],
+                        total=tour_data['infantPax'] * tour_data['infantPrice'],
+                        created_by=self.context['request'].user
+                    )
 
         # Update payment details if provided
         if payment_details_data:
