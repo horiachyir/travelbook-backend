@@ -275,7 +275,13 @@ class BookingSerializer(serializers.Serializer):
             # Delete existing tours
             BookingTour.objects.filter(booking=instance).delete()
 
-            # Create new tours
+            # Initialize aggregation variables
+            total_adults = 0
+            total_children = 0
+            total_infants = 0
+            total_amount = 0
+
+            # Create new tours and calculate totals
             for tour_data in tours_data:
                 BookingTour.objects.create(
                     id=tour_data['id'],
@@ -297,6 +303,20 @@ class BookingSerializer(serializers.Serializer):
                     comments=tour_data.get('comments', ''),
                     created_by=self.context['request'].user
                 )
+
+                # Aggregate passenger counts and amounts from tours
+                total_adults += tour_data.get('adultPax', 0)
+                total_children += tour_data.get('childPax', 0)
+                total_infants += tour_data.get('infantPax', 0)
+                total_amount += tour_data.get('subtotal', 0)
+
+            # Update booking aggregate fields from tours data
+            instance.total_adults = total_adults
+            instance.total_children = total_children
+            instance.total_infants = total_infants
+            instance.total_amount = total_amount
+            instance.passengers = total_adults + total_children + total_infants
+            instance.save()
 
         # Update pricing breakdown if provided
         if pricing_data and 'breakdown' in pricing_data:
