@@ -462,13 +462,18 @@ def create_booking_payment(request):
                     send_quotation_access=booking_options.get('sendQuotationAccess', True),
                     created_by=request.user
                 )
-                
+
+                # Update booking status to confirmed
+                most_recent_booking.status = 'confirmed'
+                most_recent_booking.save()
+
                 return Response({
                     'success': True,
                     'message': 'Payment details saved successfully',
                     'data': {
                         'payment_id': booking_payment.id,
                         'booking_id': str(most_recent_booking.id),
+                        'booking_status': most_recent_booking.status,
                         'amount_paid': float(booking_payment.amount_paid),
                         'method': booking_payment.method,
                         'status': booking_payment.status,
