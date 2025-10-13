@@ -283,26 +283,42 @@ class BookingSerializer(serializers.Serializer):
 
             # Create new tours and calculate totals
             for tour_data in tours_data:
-                BookingTour.objects.create(
-                    id=tour_data['id'],
-                    booking=instance,
-                    tour_reference_id=tour_data['tourId'],
-                    tour_name=tour_data['tourName'],
-                    tour_code=tour_data['tourCode'],
-                    date=tour_data['date'],
-                    pickup_address=tour_data['pickupAddress'],
-                    pickup_time=tour_data['pickupTime'],
-                    adult_pax=tour_data['adultPax'],
-                    adult_price=tour_data['adultPrice'],
-                    child_pax=tour_data['childPax'],
-                    child_price=tour_data['childPrice'],
-                    infant_pax=tour_data['infantPax'],
-                    infant_price=tour_data['infantPrice'],
-                    subtotal=tour_data['subtotal'],
-                    operator=tour_data['operator'],
-                    comments=tour_data.get('comments', ''),
-                    created_by=self.context['request'].user
-                )
+                # Let Django auto-generate UUID for new tours
+                # Only use provided ID if it's a valid UUID (existing tour)
+                tour_id = tour_data.get('id')
+                create_kwargs = {
+                    'booking': instance,
+                    'tour_reference_id': tour_data['tourId'],
+                    'tour_name': tour_data['tourName'],
+                    'tour_code': tour_data.get('tourCode', ''),
+                    'date': tour_data['date'],
+                    'pickup_address': tour_data['pickupAddress'],
+                    'pickup_time': tour_data['pickupTime'],
+                    'adult_pax': tour_data['adultPax'],
+                    'adult_price': tour_data['adultPrice'],
+                    'child_pax': tour_data['childPax'],
+                    'child_price': tour_data['childPrice'],
+                    'infant_pax': tour_data['infantPax'],
+                    'infant_price': tour_data['infantPrice'],
+                    'subtotal': tour_data['subtotal'],
+                    'operator': tour_data['operator'],
+                    'comments': tour_data.get('comments', ''),
+                    'created_by': self.context['request'].user
+                }
+
+                # Only include ID if it looks like a valid UUID (not a timestamp)
+                # UUIDs contain hyphens, timestamps don't
+                if tour_id and '-' in str(tour_id):
+                    try:
+                        import uuid
+                        # Validate it's a proper UUID
+                        uuid.UUID(str(tour_id))
+                        create_kwargs['id'] = tour_id
+                    except (ValueError, AttributeError):
+                        # Invalid UUID, let Django generate a new one
+                        pass
+
+                BookingTour.objects.create(**create_kwargs)
 
                 # Aggregate passenger counts and amounts from tours
                 total_adults += tour_data.get('adultPax', 0)
