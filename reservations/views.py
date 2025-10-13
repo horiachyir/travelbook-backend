@@ -2,14 +2,61 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from .models import Booking, BookingTour, BookingPayment, BookingPricingBreakdown
+from .models import Booking, BookingTour, BookingPayment
 from .serializers import BookingSerializer
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 import logging
+import json
+import os
+from datetime import datetime
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+def save_booking_to_json(booking_data, booking_id=None):
+    """
+    Save booking data to a JSON file in the json_data directory.
+
+    Args:
+        booking_data: The booking data dictionary to save
+        booking_id: Optional booking ID to use in the filename
+
+    Returns:
+        str: Path to the saved JSON file
+    """
+    try:
+        # Create json_data directory if it doesn't exist
+        json_dir = os.path.join(settings.BASE_DIR, 'json_data', 'bookings')
+        os.makedirs(json_dir, exist_ok=True)
+
+        # Generate filename with timestamp and booking ID
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        if booking_id:
+            filename = f'booking_{booking_id}_{timestamp}.json'
+        else:
+            filename = f'booking_{timestamp}.json'
+
+        filepath = os.path.join(json_dir, filename)
+
+        # Convert datetime objects to ISO format strings for JSON serialization
+        def serialize_datetime(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+
+        # Save the data to JSON file
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(booking_data, f, ensure_ascii=False, indent=2, default=serialize_datetime)
+
+        logger.info(f"Booking data saved to JSON file: {filepath}")
+        return filepath
+
+    except Exception as e:
+        logger.error(f"Error saving booking data to JSON: {str(e)}")
+        return None
 
 
 @api_view(['POST', 'GET'])
@@ -21,9 +68,7 @@ def create_booking(request):
     GET /api/booking/ - Retrieve bookings created by the current authenticated user with comprehensive data from all related tables:
     - Booking information (filtered by current user)
     - Customer details (name, email, phone, country, etc.)
-    - Tour details (multiple tours per booking)
-    - Pricing breakdown (detailed cost breakdown)  
-    - Payment details (method, status, amounts)
+    - Tour details (multiple tours per booking)    - Payment details (method, status, amounts)
     - Statistics (total bookings, customers, tours, revenue for current user only)
     
     POST /api/booking/ - Create a new booking with multiple tours, customer info, and payment details.
@@ -40,7 +85,7 @@ def create_booking(request):
         try:
             # Get bookings created by the current authenticated user only
             bookings = Booking.objects.select_related('customer', 'created_by').prefetch_related(
-                'booking_tours', 'pricing_breakdown', 'payment_details'
+                'booking_tours', 'payment_details'
             ).filter(created_by=request.user).order_by('-created_at')
             
             booking_data = []
@@ -103,23 +148,6 @@ def create_booking(request):
                     },
                     'hotel': booking.hotel,
                     'room': booking.room,
-                }
-                
-                # Pricing breakdown
-                pricing_breakdown = []
-                for breakdown in booking.pricing_breakdown.all():
-                    pricing_breakdown.append({
-                        'item': breakdown.item,
-                        'quantity': breakdown.quantity,
-                        'unitPrice': float(breakdown.unit_price),
-                        'total': float(breakdown.total),
-                    })
-                
-                # Pricing data
-                pricing_data = {
-                    'amount': float(booking.total_amount),
-                    'currency': booking.currency,
-                    'breakdown': pricing_breakdown,
                 }
                 
                 # Payment details - get all payments for this booking
@@ -235,18 +263,27 @@ def create_booking(request):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     try:
+        # Save the incoming request data to JSON file before processing
+        json_filepath = save_booking_to_json(dict(request.data))
+        logger.info(f"Received booking data saved to: {json_filepath}")
+
         serializer = BookingSerializer(data=request.data, context={'request': request})
-        
+
         if serializer.is_valid():
             booking = serializer.save()
-            
+
+            # Save again with the generated booking ID
+            if json_filepath:
+                save_booking_to_json(dict(request.data), booking_id=str(booking.id))
+
             # Return the created booking data
             response_serializer = BookingSerializer(booking, context={'request': request})
-            
+
             return Response({
                 'success': True,
                 'message': 'Booking created successfully',
-                'data': response_serializer.data
+                'data': response_serializer.data,
+                'json_saved': json_filepath is not None
             }, status=status.HTTP_201_CREATED)
         
         return Response({
@@ -347,20 +384,18 @@ def get_booking(request, booking_id):
             with transaction.atomic():
                 # Get counts for confirmation message
                 tours_count = BookingTour.objects.filter(booking=booking).count()
-                pricing_count = BookingPricingBreakdown.objects.filter(booking=booking).count()
                 payments_count = BookingPayment.objects.filter(booking=booking).count()
 
                 # Delete associated data (Django will handle this automatically with CASCADE,
                 # but we'll be explicit for clarity)
                 BookingTour.objects.filter(booking=booking).delete()
-                BookingPricingBreakdown.objects.filter(booking=booking).delete()
                 BookingPayment.objects.filter(booking=booking).delete()
 
                 # Delete the main booking record
                 booking_id_str = str(booking.id)
                 booking.delete()
-
-                logger.info(f"Deleted booking {booking_id} and associated data: {tours_count} tours, {pricing_count} pricing items, {payments_count} payments")
+            
+                logger.info(f"Deleted booking {booking_id} and associated data: {tours_count} tours, {payments_count} payments")
 
                 return Response({
                     'success': True,
@@ -368,7 +403,6 @@ def get_booking(request, booking_id):
                     'data': {
                         'deleted_booking_id': booking_id_str,
                         'deleted_tours': tours_count,
-                        'deleted_pricing_items': pricing_count,
                         'deleted_payments': payments_count
                     }
                 }, status=status.HTTP_200_OK)
@@ -518,9 +552,7 @@ def delete_booking(request, booking_id):
     
     This endpoint deletes:
     - The booking record from the 'bookings' table
-    - All associated tours from 'booking_tours' table
-    - All associated pricing breakdowns from 'booking_pricing_breakdown' table
-    - All associated payments from 'booking_payments' table
+    - All associated tours from 'booking_tours' table    - All associated payments from 'booking_payments' table
     
     The booking_id parameter corresponds to the primary ID of the bookings table.
     """
@@ -538,27 +570,24 @@ def delete_booking(request, booking_id):
         with transaction.atomic():
             # Get counts for confirmation message
             tours_count = BookingTour.objects.filter(booking=booking).count()
-            pricing_count = BookingPricingBreakdown.objects.filter(booking=booking).count()
             payments_count = BookingPayment.objects.filter(booking=booking).count()
-            
+
             # Delete associated data (Django will handle this automatically with CASCADE,
             # but we'll be explicit for clarity)
             BookingTour.objects.filter(booking=booking).delete()
-            BookingPricingBreakdown.objects.filter(booking=booking).delete()
             BookingPayment.objects.filter(booking=booking).delete()
-            
+
             # Delete the main booking record
             booking.delete()
-            
-            logger.info(f"Deleted booking {booking_id} and associated data: {tours_count} tours, {pricing_count} pricing items, {payments_count} payments")
-            
+
+            logger.info(f"Deleted booking {booking_id} and associated data: {tours_count} tours, {payments_count} payments")
+
             return Response({
                 'success': True,
                 'message': 'Booking and all associated data deleted successfully',
                 'data': {
                     'deleted_booking_id': str(booking_id),
                     'deleted_tours': tours_count,
-                    'deleted_pricing_items': pricing_count,
                     'deleted_payments': payments_count
                 }
             }, status=status.HTTP_200_OK)
@@ -582,9 +611,7 @@ def get_all_reservations(request):
     
     This endpoint returns comprehensive data from:
     - bookings table (all bookings from all users)
-    - booking_tours table (all tours associated with bookings)
-    - booking_pricing_breakdown table (all pricing breakdowns)
-    - booking_payments table (all payment records)
+    - booking_tours table (all tours associated with bookings)    - booking_payments table (all payment records)
     - customers table (all customer information)
     
     No user filtering is applied - returns all data stored in the database.
@@ -592,7 +619,7 @@ def get_all_reservations(request):
     try:
         # Get all bookings with related data
         bookings = Booking.objects.select_related('customer', 'created_by').prefetch_related(
-            'booking_tours', 'pricing_breakdown', 'payment_details'
+            'booking_tours', 'payment_details'
         ).all().order_by('-created_at')
         
         booking_data = []
@@ -656,26 +683,6 @@ def get_all_reservations(request):
                 },
                 'hotel': booking.hotel,
                 'room': booking.room,
-            }
-            
-            # Pricing breakdown
-            pricing_breakdown = []
-            for breakdown in booking.pricing_breakdown.all():
-                pricing_breakdown.append({
-                    'id': breakdown.id,
-                    'item': breakdown.item,
-                    'quantity': breakdown.quantity,
-                    'unitPrice': float(breakdown.unit_price),
-                    'total': float(breakdown.total),
-                    'createdBy': str(breakdown.created_by.id) if breakdown.created_by else None,
-                    'createdAt': breakdown.created_at,
-                })
-            
-            # Pricing data
-            pricing_data = {
-                'amount': float(booking.total_amount),
-                'currency': booking.currency,
-                'breakdown': pricing_breakdown,
             }
             
             # Payment details - get all payments for this booking
@@ -773,8 +780,7 @@ def get_all_reservations(request):
         total_tours = BookingTour.objects.count()
         total_revenue = sum(booking.total_amount for booking in bookings)
         total_payments = BookingPayment.objects.count()
-        total_pricing_items = BookingPricingBreakdown.objects.count()
-        
+
         return Response({
             'success': True,
             'message': f'Retrieved {len(booking_data)} reservations successfully',
@@ -784,7 +790,6 @@ def get_all_reservations(request):
                 'totalCustomers': total_customers,
                 'totalTours': total_tours,
                 'totalPayments': total_payments,
-                'totalPricingItems': total_pricing_items,
                 'totalRevenue': float(total_revenue),
                 'currency': 'CLP' if bookings else 'USD',
             },
@@ -908,16 +913,14 @@ def get_public_booking(request, link):
     This endpoint retrieves comprehensive booking data from all related tables:
     - bookings table (using shareable_link field)
     - customers table (customer details)
-    - booking_tours table (tours associated with booking)
-    - booking_pricing_breakdown table (pricing details)
-    - booking_payments table (payment information)
+    - booking_tours table (tours associated with booking)    - booking_payments table (payment information)
 
     No authentication required - this is a public endpoint for shareable links.
     """
     try:
         # Find booking by shareable_link
         booking = Booking.objects.select_related('customer', 'created_by').prefetch_related(
-            'booking_tours', 'pricing_breakdown', 'payment_details'
+            'booking_tours', 'payment_details'
         ).get(shareable_link=link)
 
         # Check if access is allowed
@@ -984,23 +987,6 @@ def get_public_booking(request, link):
             },
             'hotel': booking.hotel,
             'room': booking.room,
-        }
-
-        # Pricing breakdown
-        pricing_breakdown = []
-        for breakdown in booking.pricing_breakdown.all():
-            pricing_breakdown.append({
-                'item': breakdown.item,
-                'quantity': breakdown.quantity,
-                'unitPrice': float(breakdown.unit_price),
-                'total': float(breakdown.total),
-            })
-
-        # Pricing data
-        pricing_data = {
-            'amount': float(booking.total_amount),
-            'currency': booking.currency,
-            'breakdown': pricing_breakdown,
         }
 
         # Payment details - get all payments for this booking

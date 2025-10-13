@@ -1,59 +1,39 @@
 from django.contrib import admin
-from .models import Booking, BookingTour, BookingPricingBreakdown, BookingPayment, Reservation
+from .models import Booking, BookingTour, BookingPayment, Reservation
 
 
 class BookingTourInline(admin.TabularInline):
     model = BookingTour
     extra = 0
     readonly_fields = ['created_at', 'updated_at']
-
-
-class BookingPricingBreakdownInline(admin.TabularInline):
-    model = BookingPricingBreakdown
-    extra = 0
-    readonly_fields = ['created_at']
+    fk_name = 'booking'
 
 
 class BookingPaymentInline(admin.StackedInline):
     model = BookingPayment
     extra = 0
     readonly_fields = ['created_at', 'updated_at']
+    fk_name = 'booking'
 
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'customer', 'destination', 'start_date', 'status', 
-        'total_amount', 'currency', 'created_by', 'created_at'
+        'id', 'customer', 'sales_person', 'status',
+        'currency', 'lead_source', 'created_by', 'created_at'
     ]
     list_filter = ['status', 'lead_source', 'currency', 'created_by', 'created_at']
-    search_fields = ['customer__name', 'customer__email', 'destination', 'assigned_to', 'created_by__email']
+    search_fields = ['customer__name', 'customer__email', 'sales_person__email', 'created_by__email']
     readonly_fields = ['id', 'created_by', 'created_at', 'updated_at']
-    inlines = [BookingTourInline, BookingPricingBreakdownInline, BookingPaymentInline]
-    
+    inlines = [BookingTourInline, BookingPaymentInline]
+
     fieldsets = (
-        ('Customer & Booking Info', {
-            'fields': ('customer', 'status', 'destination', 'tour_type')
+        ('Customer & Config', {
+            'fields': ('customer', 'sales_person', 'lead_source', 'currency')
         }),
-        ('Dates & Passengers', {
-            'fields': ('start_date', 'end_date', 'passengers', 'total_adults', 
-                      'total_children', 'total_infants')
-        }),
-        ('Hotel & Pickup', {
-            'fields': ('hotel', 'room', 'has_multiple_addresses')
-        }),
-        ('Pricing', {
-            'fields': ('total_amount', 'currency')
-        }),
-        ('Business Details', {
-            'fields': ('lead_source', 'assigned_to', 'agency', 'valid_until')
-        }),
-        ('Additional Info', {
-            'fields': ('additional_notes', 'terms_accepted', 'quotation_comments')
-        }),
-        ('Settings', {
-            'fields': ('include_payment', 'copy_comments', 'send_purchase_order', 
-                      'send_quotation_access')
+        ('Booking Details', {
+            'fields': ('status', 'valid_until', 'quotation_comments',
+                      'send_quotation_access', 'shareable_link')
         }),
         ('User & Timestamps', {
             'fields': ('created_by', 'created_at', 'updated_at'),
@@ -65,11 +45,11 @@ class BookingAdmin(admin.ModelAdmin):
 @admin.register(BookingTour)
 class BookingTourAdmin(admin.ModelAdmin):
     list_display = [
-        'id', 'booking', 'tour_name', 'date', 'adult_pax', 
+        'id', 'booking', 'tour', 'date', 'adult_pax',
         'child_pax', 'subtotal', 'operator', 'created_by'
     ]
     list_filter = ['operator', 'date', 'created_by']
-    search_fields = ['tour_name', 'tour_code', 'booking__customer__name', 'created_by__email']
+    search_fields = ['tour__name', 'booking__customer__name', 'created_by__email']
     readonly_fields = ['created_by', 'created_at', 'updated_at']
 
 

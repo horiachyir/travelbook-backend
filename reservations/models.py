@@ -7,6 +7,10 @@ User = get_user_model()
 
 
 class Booking(models.Model):
+    """
+    Simplified Booking model matching the new data structure.
+    Stores config data, status, validUntil, quotationComments, sendQuotationAccess, shareableLink.
+    """
     STATUS_CHOICES = [
         ('confirmed', 'Confirmed'),
         ('pending', 'Pending'),
@@ -17,6 +21,7 @@ class Booking(models.Model):
     LEAD_SOURCE_CHOICES = [
         ('instagram', 'Instagram'),
         ('facebook', 'Facebook'),
+        ('youtube', 'YouTube'),
         ('website', 'Website'),
         ('referral', 'Referral'),
         ('email', 'Email'),
@@ -24,130 +29,89 @@ class Booking(models.Model):
         ('other', 'Other'),
     ]
 
+    CURRENCY_CHOICES = [
+        ('CLP', 'Chilean Peso'),
+        ('USD', 'US Dollar'),
+        ('EUR', 'Euro'),
+        ('BRL', 'Brazilian Real'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Customer information
+
+    # Customer information (Foreign Key)
     customer = models.ForeignKey('customers.Customer', on_delete=models.CASCADE, related_name='bookings')
-    
-    # Tour details (summary information)
-    destination = models.CharField(max_length=255)
-    tour_type = models.CharField(max_length=100)
-    start_date = models.DateTimeField()
-    end_date = models.DateTimeField()
-    passengers = models.IntegerField()
-    
-    # Passenger breakdown
-    total_adults = models.IntegerField(default=0)
-    total_children = models.IntegerField(default=0)
-    total_infants = models.IntegerField(default=0)
-    
-    # Hotel information
-    hotel = models.CharField(max_length=255, blank=True)
-    room = models.CharField(max_length=100, blank=True)
-    
-    # Pricing
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.CharField(max_length=10, default='CLP')
-    
-    # Business details
-    lead_source = models.CharField(max_length=50, choices=LEAD_SOURCE_CHOICES)
-    assigned_to = models.CharField(max_length=255)
-    agency = models.CharField(max_length=255, blank=True, null=True)
+
+    # Config object fields
+    sales_person = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='assigned_bookings')
+    lead_source = models.CharField(max_length=50, choices=LEAD_SOURCE_CHOICES, default='website')
+    currency = models.CharField(max_length=10, choices=CURRENCY_CHOICES, default='CLP')
+
+    # Root level fields from request
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     valid_until = models.DateTimeField()
-    
-    # Additional information
-    additional_notes = models.TextField(blank=True)
-    has_multiple_addresses = models.BooleanField(default=False)
-    shareable_link = models.CharField(max_length=500, blank=True, null=True)
-    
-    # Terms and conditions
-    terms_accepted = models.BooleanField(default=False)
-    
-    # Quotation settings
     quotation_comments = models.TextField(blank=True)
-    include_payment = models.BooleanField(default=True)
-    copy_comments = models.BooleanField(default=True)
-    send_purchase_order = models.BooleanField(default=True)
     send_quotation_access = models.BooleanField(default=True)
-    
+    shareable_link = models.CharField(max_length=500, blank=True, null=True, unique=True)
+
     # Timestamps and user tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_bookings')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = 'bookings'
         ordering = ['-created_at']
-    
+
     def __str__(self):
-        return f"Booking {self.id} - {self.customer.name}"
+        return f"Booking {self.id} - {self.customer.name if self.customer else 'No Customer'}"
 
 
 class BookingTour(models.Model):
-    """Individual tour within a booking"""
+    """
+    Individual tour within a booking.
+    Stores tour data matching the new structure.
+    """
     OPERATOR_CHOICES = [
         ('own-operation', 'Own Operation'),
         ('third-party', 'Third Party'),
     ]
-    
-    id = models.CharField(max_length=50, primary_key=True)  # Using the timestamp ID from the data
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='booking_tours')
-    tour = models.ForeignKey('tours.Tour', on_delete=models.PROTECT, related_name='booking_tours', null=True, blank=True)
-    
-    # Tour details
-    tour_reference_id = models.CharField(max_length=100)
-    tour_name = models.CharField(max_length=255)
-    tour_code = models.CharField(max_length=100)
+
+    # Foreign Keys to related tables
+    tour = models.ForeignKey('tours.Tour', on_delete=models.PROTECT, related_name='booking_tours')
+    destination = models.ForeignKey('settings_app.Destination', on_delete=models.PROTECT, related_name='booking_tours', null=True, blank=True)
+
+    # Tour date and pickup details
     date = models.DateTimeField()
-    
-    # Pickup details
-    pickup_address = models.CharField(max_length=500)
-    pickup_time = models.CharField(max_length=10)
-    
+    pickup_address = models.CharField(max_length=500, blank=True)
+    pickup_time = models.CharField(max_length=10, blank=True)
+
     # Passengers and pricing
     adult_pax = models.IntegerField(default=0)
-    adult_price = models.DecimalField(max_digits=10, decimal_places=2)
+    adult_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     child_pax = models.IntegerField(default=0)
-    child_price = models.DecimalField(max_digits=10, decimal_places=2)
+    child_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     infant_pax = models.IntegerField(default=0)
     infant_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    
+
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
-    operator = models.CharField(max_length=100, choices=OPERATOR_CHOICES)
+    operator = models.CharField(max_length=100, choices=OPERATOR_CHOICES, default='own-operation')
     comments = models.TextField(blank=True)
-    
+
     # User tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_tours')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = 'booking_tours'
         ordering = ['date']
-    
-    def __str__(self):
-        return f"{self.tour_name} - {self.date.strftime('%Y-%m-%d')}"
 
-
-class BookingPricingBreakdown(models.Model):
-    """Detailed pricing breakdown for a booking"""
-    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='pricing_breakdown')
-    item = models.CharField(max_length=255)
-    quantity = models.IntegerField()
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    total = models.DecimalField(max_digits=10, decimal_places=2)
-    
-    # User tracking
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_pricing_breakdowns')
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        db_table = 'booking_pricing_breakdown'
-        ordering = ['id']
-    
     def __str__(self):
-        return f"{self.item} - {self.quantity}x{self.unit_price}"
+        tour_name = self.tour.name if self.tour else 'Unknown Tour'
+        return f"{tour_name} - {self.date.strftime('%Y-%m-%d')}"
 
 
 class BookingPayment(models.Model):
