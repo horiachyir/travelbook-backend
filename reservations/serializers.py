@@ -283,9 +283,7 @@ class BookingSerializer(serializers.Serializer):
 
             # Create new tours and calculate totals
             for tour_data in tours_data:
-                # Let Django auto-generate UUID for new tours
-                # Only use provided ID if it's a valid UUID (existing tour)
-                tour_id = tour_data.get('id')
+                # Prepare creation kwargs without ID first
                 create_kwargs = {
                     'booking': instance,
                     'tour_reference_id': tour_data['tourId'],
@@ -306,15 +304,16 @@ class BookingSerializer(serializers.Serializer):
                     'created_by': self.context['request'].user
                 }
 
-                # Only include ID if it looks like a valid UUID (not a timestamp)
-                # UUIDs contain hyphens, timestamps don't
-                if tour_id and '-' in str(tour_id):
+                # Only include ID if it's a valid UUID from the database
+                # New tours will have timestamp IDs (no hyphens), so we skip those
+                tour_id = tour_data.get('id')
+                if tour_id and isinstance(tour_id, str) and tour_id.strip() and '-' in tour_id:
                     try:
                         import uuid
                         # Validate it's a proper UUID
-                        uuid.UUID(str(tour_id))
+                        uuid.UUID(tour_id)
                         create_kwargs['id'] = tour_id
-                    except (ValueError, AttributeError):
+                    except (ValueError, AttributeError, TypeError):
                         # Invalid UUID, let Django generate a new one
                         pass
 

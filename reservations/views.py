@@ -314,6 +314,18 @@ def get_booking(request, booking_id):
             }, status=status.HTTP_200_OK)
 
         elif request.method == 'PUT':
+            # Log the incoming tours data for debugging
+            tours_data = request.data.get('tours', [])
+            logger.info(f"=== PUT /api/booking/{booking_id}/ ===")
+            logger.info(f"Number of tours received: {len(tours_data)}")
+            for idx, tour in enumerate(tours_data):
+                tour_id = tour.get('id')
+                tour_name = tour.get('tourName', 'Unknown')
+                logger.info(f"Tour {idx}: id='{tour_id}' (type: {type(tour_id)}), name='{tour_name}'")
+                # Check if ID is empty, None, or invalid
+                if not tour_id or (isinstance(tour_id, str) and not tour_id.strip()):
+                    logger.warning(f"Tour {idx} has empty or None ID!")
+
             serializer = BookingSerializer(booking, data=request.data, context={'request': request})
 
             if serializer.is_valid():
