@@ -3,6 +3,9 @@ from .models import Booking, BookingTour, BookingPricingBreakdown, BookingPaymen
 from customers.models import Customer
 from customers.serializers import CustomerSerializer
 from django.db import transaction
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BookingTourSerializer(serializers.ModelSerializer):
@@ -282,42 +285,31 @@ class BookingSerializer(serializers.Serializer):
             total_amount = 0
 
             # Create new tours and calculate totals
+            # Since we delete all existing tours and recreate them,
+            # we don't need to preserve IDs - let Django generate new UUIDs
             for tour_data in tours_data:
-                # Prepare creation kwargs without ID first
-                create_kwargs = {
-                    'booking': instance,
-                    'tour_reference_id': tour_data['tourId'],
-                    'tour_name': tour_data['tourName'],
-                    'tour_code': tour_data.get('tourCode', ''),
-                    'date': tour_data['date'],
-                    'pickup_address': tour_data['pickupAddress'],
-                    'pickup_time': tour_data['pickupTime'],
-                    'adult_pax': tour_data['adultPax'],
-                    'adult_price': tour_data['adultPrice'],
-                    'child_pax': tour_data['childPax'],
-                    'child_price': tour_data['childPrice'],
-                    'infant_pax': tour_data['infantPax'],
-                    'infant_price': tour_data['infantPrice'],
-                    'subtotal': tour_data['subtotal'],
-                    'operator': tour_data['operator'],
-                    'comments': tour_data.get('comments', ''),
-                    'created_by': self.context['request'].user
-                }
+                logger.info(f"Creating tour: {tour_data.get('tourName', 'Unknown')} (ignoring any provided ID)")
 
-                # Only include ID if it's a valid UUID from the database
-                # New tours will have timestamp IDs (no hyphens), so we skip those
-                tour_id = tour_data.get('id')
-                if tour_id and isinstance(tour_id, str) and tour_id.strip() and '-' in tour_id:
-                    try:
-                        import uuid
-                        # Validate it's a proper UUID
-                        uuid.UUID(tour_id)
-                        create_kwargs['id'] = tour_id
-                    except (ValueError, AttributeError, TypeError):
-                        # Invalid UUID, let Django generate a new one
-                        pass
-
-                BookingTour.objects.create(**create_kwargs)
+                # Create tour without ID - Django will auto-generate UUID
+                BookingTour.objects.create(
+                    booking=instance,
+                    tour_reference_id=tour_data['tourId'],
+                    tour_name=tour_data['tourName'],
+                    tour_code=tour_data.get('tourCode', ''),
+                    date=tour_data['date'],
+                    pickup_address=tour_data.get('pickupAddress', ''),
+                    pickup_time=tour_data.get('pickupTime', ''),
+                    adult_pax=tour_data.get('adultPax', 0),
+                    adult_price=tour_data.get('adultPrice', 0),
+                    child_pax=tour_data.get('childPax', 0),
+                    child_price=tour_data.get('childPrice', 0),
+                    infant_pax=tour_data.get('infantPax', 0),
+                    infant_price=tour_data.get('infantPrice', 0),
+                    subtotal=tour_data.get('subtotal', 0),
+                    operator=tour_data.get('operator', 'own-operation'),
+                    comments=tour_data.get('comments', ''),
+                    created_by=self.context['request'].user
+                )
 
                 # Aggregate passenger counts and amounts from tours
                 total_adults += tour_data.get('adultPax', 0)
@@ -437,7 +429,7 @@ class BookingSerializer(serializers.Serializer):
                 'updated_at': instance.updated_at,
                 'booking_tours': [
                     {
-                        'id': tour.id,
+                        'id': str(tour.id),  # Explicitly convert UUID to string
                         'tour_name': tour.tour_name,
                         'tour_code': tour.tour_code,
                         'date': tour.date,

@@ -69,7 +69,7 @@ def create_booking(request):
                 tours_data = []
                 for tour in booking.booking_tours.all():
                     tours_data.append({
-                        'id': tour.id,
+                        'id': str(tour.id),  # Explicitly convert UUID to string
                         'tourId': tour.tour_reference_id,
                         'tourName': tour.tour_name,
                         'tourCode': tour.tour_code,
@@ -319,12 +319,9 @@ def get_booking(request, booking_id):
             logger.info(f"=== PUT /api/booking/{booking_id}/ ===")
             logger.info(f"Number of tours received: {len(tours_data)}")
             for idx, tour in enumerate(tours_data):
-                tour_id = tour.get('id')
                 tour_name = tour.get('tourName', 'Unknown')
-                logger.info(f"Tour {idx}: id='{tour_id}' (type: {type(tour_id)}), name='{tour_name}'")
-                # Check if ID is empty, None, or invalid
-                if not tour_id or (isinstance(tour_id, str) and not tour_id.strip()):
-                    logger.warning(f"Tour {idx} has empty or None ID!")
+                has_id = 'id' in tour
+                logger.info(f"Tour {idx}: name='{tour_name}', has_id={has_id}")
 
             serializer = BookingSerializer(booking, data=request.data, context={'request': request})
 
@@ -624,7 +621,7 @@ def get_all_reservations(request):
             tours_data = []
             for tour in booking.booking_tours.all():
                 tours_data.append({
-                    'id': tour.id,
+                    'id': str(tour.id),  # Explicitly convert UUID to string
                     'tourId': tour.tour_reference_id,
                     'tourName': tour.tour_name,
                     'tourCode': tour.tour_code,
@@ -953,7 +950,7 @@ def get_public_booking(request, link):
         tours_data = []
         for tour in booking.booking_tours.all():
             tours_data.append({
-                'id': tour.id,
+                'id': str(tour.id),  # Explicitly convert UUID to string
                 'tourId': tour.tour_reference_id,
                 'tourName': tour.tour_name,
                 'tourCode': tour.tour_code,
