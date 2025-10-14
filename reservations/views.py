@@ -214,7 +214,7 @@ def create_booking(request):
                 booking_item = {
                     'id': str(booking.id),
                     'sales_person_id': str(booking.sales_person.id) if booking.sales_person else None,
-                    'fullName': booking.customer.name,
+                    'fullName': booking.sales_person.full_name if booking.sales_person else None,
                     'leadSource': booking.lead_source,
                     'currency': booking.currency,
                     'status': booking.status,
