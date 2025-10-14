@@ -178,18 +178,36 @@ def verify_email(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def refresh_token(request):
+    """
+    Refresh access token using refresh token.
+    Returns both new access token and new refresh token (rotation enabled).
+    """
     refresh = request.data.get('refresh')
     if not refresh:
         return Response({'error': 'Refresh token required'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     try:
+        # Create RefreshToken object from the provided token
         token = RefreshToken(refresh)
+
+        # Get new access token
+        new_access_token = str(token.access_token)
+
+        # Because ROTATE_REFRESH_TOKENS is True, we need to return a new refresh token
+        # The old refresh token will be blacklisted automatically
+        new_refresh_token = str(token)
+
         return Response({
-            'access': str(token.access_token),
-            'refresh': str(token),
+            'access': new_access_token,
+            'refresh': new_refresh_token,
         }, status=status.HTTP_200_OK)
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        # Log the error for debugging
+        print(f"Token refresh error: {str(e)}")
+        return Response({
+            'error': 'Invalid or expired refresh token',
+            'detail': str(e)
+        }, status=status.HTTP_401_UNAUTHORIZED)
 
 
 @api_view(['POST'])
