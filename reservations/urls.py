@@ -13,8 +13,6 @@ urlpatterns = [
     path('booking/', views.create_booking, name='create_booking'),
     re_path(r'^booking/?$', views.create_booking, name='create_booking_no_slash'),
 
-    path('bookings/', views.get_bookings, name='get_bookings'),
-
     # Basic data endpoint - get users and tours (must come before empty path)
     path('basic/', views.get_basic_data, name='get_basic_data'),
     re_path(r'^basic/?$', views.get_basic_data, name='get_basic_data_no_slash'),

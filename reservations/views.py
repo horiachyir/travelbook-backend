@@ -7,6 +7,7 @@ from .serializers import BookingSerializer
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+from decimal import Decimal
 import logging
 import json
 import os
@@ -83,15 +84,22 @@ def create_booking(request):
     """
     if request.method == 'GET':
         try:
-            # Get bookings created by the current authenticated user only
-            bookings = Booking.objects.select_related('customer', 'created_by').prefetch_related(
-                'booking_tours', 'payment_details'
+            # Get all bookings with related data using select_related and prefetch_related for optimization
+            bookings = Booking.objects.select_related(
+                'customer',           # Join customers table via customer_id
+                'sales_person',       # Join users table via sales_person_id
+                'created_by'          # Join users table via created_by
+            ).prefetch_related(
+                'booking_tours__tour',           # Join tours table via tour_id in booking_tours
+                'booking_tours__destination',    # Join destinations table via destination_id in booking_tours
+                'booking_tours__created_by',     # Join users table for tour creator
+                'payment_details__created_by'    # Join users table for payment creator
             ).filter(created_by=request.user).order_by('-created_at')
-            
+
             booking_data = []
-            
+
             for booking in bookings:
-                # Customer data
+                # 1. Customer data from customers table (via customer_id FK)
                 customer_data = {
                     'id': str(booking.customer.id),
                     'name': booking.customer.name,
@@ -102,6 +110,9 @@ def create_booking(request):
                     'idNumber': booking.customer.id_number,
                     'cpf': booking.customer.cpf,
                     'address': booking.customer.address,
+                    'comments': booking.customer.comments,
+                    'hotel': booking.customer.hotel,
+                    'room': booking.customer.room,
                     'status': booking.customer.status,
                     'totalBookings': booking.customer.total_bookings,
                     'totalSpent': float(booking.customer.total_spent),
@@ -109,48 +120,55 @@ def create_booking(request):
                     'createdAt': booking.customer.created_at,
                     'updatedAt': booking.customer.updated_at,
                 }
-                
-                # Tours data
+
+                # 2. Tours data from booking_tours table (via booking_id FK)
                 tours_data = []
                 total_amount = Decimal('0.00')
-                for tour in booking.booking_tours.all():
-                    tour_subtotal = float(tour.subtotal)
-                    total_amount += tour.subtotal
+
+                for booking_tour in booking.booking_tours.all():
+                    tour_subtotal = float(booking_tour.subtotal)
+                    total_amount += booking_tour.subtotal
 
                     tours_data.append({
-                        'id': str(tour.id),  # Explicitly convert UUID to string
-                        'tourId': str(tour.tour.id) if tour.tour else None,
-                        'tourName': tour.tour.name if tour.tour else '',
-                        'destination': str(tour.destination.id) if tour.destination else None,
-                        'destinationName': tour.destination.name if tour.destination else '',
-                        'date': tour.date,
-                        'pickupAddress': tour.pickup_address,
-                        'pickupTime': tour.pickup_time,
-                        'adultPax': tour.adult_pax,
-                        'adultPrice': float(tour.adult_price),
-                        'childPax': tour.child_pax,
-                        'childPrice': float(tour.child_price),
-                        'infantPax': tour.infant_pax,
-                        'infantPrice': float(tour.infant_price),
+                        'id': str(booking_tour.id),
+                        'tourId': str(booking_tour.tour.id) if booking_tour.tour else None,
+                        'tourName': booking_tour.tour.name if booking_tour.tour else '',
+                        'destination': str(booking_tour.destination.id) if booking_tour.destination else None,
+                        'destinationName': booking_tour.destination.name if booking_tour.destination else '',
+                        'date': booking_tour.date,
+                        'pickupAddress': booking_tour.pickup_address,
+                        'pickupTime': booking_tour.pickup_time,
+                        'adultPax': booking_tour.adult_pax,
+                        'adultPrice': float(booking_tour.adult_price),
+                        'childPax': booking_tour.child_pax,
+                        'childPrice': float(booking_tour.child_price),
+                        'infantPax': booking_tour.infant_pax,
+                        'infantPrice': float(booking_tour.infant_price),
                         'subtotal': tour_subtotal,
-                        'operator': tour.operator,
-                        'comments': tour.comments,
-                        'createdAt': tour.created_at,
-                        'updatedAt': tour.updated_at,
+                        'operator': booking_tour.operator,
+                        'comments': booking_tour.comments,
                     })
-                
-                # Pricing data - calculate from tours
+
+                # 3. Pricing data - calculated from tours
                 pricing_data = {
                     'amount': float(total_amount),
                     'currency': booking.currency,
                     'breakdown': []
                 }
-                
-                # Payment details - get all payments for this booking
+
+                # 4. Payment details from booking_payments table (via booking_id FK)
                 payments_data = []
-                booking_options_data = None
-                
+
                 for payment in booking.payment_details.all().order_by('-created_at'):
+                    # Get payment creator data from users table
+                    payment_created_by = None
+                    if payment.created_by:
+                        payment_created_by = {
+                            'id': str(payment.created_by.id),
+                            'email': payment.created_by.email,
+                            'fullName': payment.created_by.full_name,
+                        }
+
                     payments_data.append({
                         'id': payment.id,
                         'date': payment.date,
@@ -160,34 +178,29 @@ def create_booking(request):
                         'comments': payment.comments,
                         'status': payment.status,
                         'receiptFile': payment.receipt_file.url if payment.receipt_file else None,
+                        'copyComments': payment.copy_comments,
+                        'includePayment': payment.include_payment,
+                        'quoteComments': payment.quote_comments,
+                        'sendPurchaseOrder': payment.send_purchase_order,
+                        'sendQuotationAccess': payment.send_quotation_access,
+                        'createdBy': payment_created_by,
                         'createdAt': payment.created_at,
                         'updatedAt': payment.updated_at,
                     })
-                    
-                    # Get booking options from the most recent payment record
-                    if not booking_options_data:
-                        booking_options_data = {
-                            'copyComments': payment.copy_comments,
-                            'includePayment': payment.include_payment,
-                            'quoteComments': payment.quote_comments,
-                            'sendPurchaseOrder': payment.send_purchase_order,
-                            'sendQuotationAccess': payment.send_quotation_access,
-                        }
-                
-                # For backward compatibility - keep single payment_details field with most recent payment
-                payment_details_data = payments_data[0] if payments_data else None
-                
-                # If no payment record, create default booking options
-                if not booking_options_data:
-                    booking_options_data = {
-                        'copyComments': False,
-                        'includePayment': False,
-                        'quoteComments': booking.quotation_comments,
-                        'sendPurchaseOrder': False,
-                        'sendQuotationAccess': booking.send_quotation_access,
+
+                # 5. Sales person data from users table (via sales_person_id FK)
+                sales_person_data = None
+                if booking.sales_person:
+                    sales_person_data = {
+                        'id': str(booking.sales_person.id),
+                        'email': booking.sales_person.email,
+                        'fullName': booking.sales_person.full_name,
+                        'phone': booking.sales_person.phone,
+                        'role': booking.sales_person.role,
+                        'status': booking.sales_person.status,
                     }
-                
-                # Created by user data
+
+                # 6. Created by user data from users table (via created_by FK)
                 created_by_data = None
                 if booking.created_by:
                     created_by_data = {
@@ -197,62 +210,35 @@ def create_booking(request):
                         'phone': booking.created_by.phone,
                     }
 
-                # Sales person data
-                sales_person_data = None
-                if booking.sales_person:
-                    sales_person_data = str(booking.sales_person.id)
-
-                # Compile complete booking data
+                # Compile complete booking data in the required format
                 booking_item = {
                     'id': str(booking.id),
-                    'customer': customer_data,
-                    'tours': tours_data,
-                    'pricing': pricing_data,
+                    'sales_person_id': str(booking.sales_person.id) if booking.sales_person else None,
+                    'fullName': booking.customer.name,
                     'leadSource': booking.lead_source,
-                    'assignedTo': sales_person_data,
+                    'currency': booking.currency,
                     'status': booking.status,
                     'validUntil': booking.valid_until,
                     'quotationComments': booking.quotation_comments,
                     'sendQuotationAccess': booking.send_quotation_access,
                     'shareableLink': booking.shareable_link,
-                    'paymentDetails': payment_details_data,  # Single payment for backward compatibility
-                    'allPayments': payments_data,  # All payments for this booking
-                    'bookingOptions': booking_options_data,  # Booking options from payment or booking record
-                    'createdBy': created_by_data,
-                    'createdAt': booking.created_at,
-                    'updatedAt': booking.updated_at,
+                    'totalAmount': float(total_amount),
+                    'customer': customer_data,                    # From customers table
+                    'tours': tours_data,                          # From booking_tours, tours, destinations tables
                 }
-                
-                booking_data.append(booking_item)
-            
-            # Additional statistics (filtered by current user)
-            total_bookings = Booking.objects.filter(created_by=request.user).count()
-            total_customers = Booking.objects.filter(created_by=request.user).values('customer').distinct().count()
-            total_tours = BookingTour.objects.filter(booking__created_by=request.user).count()
 
-            # Calculate total revenue from booking tours
-            total_revenue = Decimal('0.00')
-            for booking in bookings:
-                for tour in booking.booking_tours.all():
-                    total_revenue += tour.subtotal
-            
+                booking_data.append(booking_item)
+
             return Response({
                 'success': True,
                 'message': f'Retrieved {len(booking_data)} bookings successfully',
                 'data': booking_data,
-                'statistics': {
-                    'totalBookings': total_bookings,
-                    'totalCustomers': total_customers,
-                    'totalTours': total_tours,
-                    'totalRevenue': float(total_revenue),
-                    'currency': 'CLP' if bookings else 'USD',
-                },
-                'count': len(booking_data),
-                'timestamp': timezone.now(),
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.error(f"Error retrieving booking data: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return Response({
                 'success': False,
                 'message': 'Error retrieving booking data',
@@ -294,31 +280,6 @@ def create_booking(request):
         return Response({
             'success': False,
             'message': 'Internal server error occurred while creating booking',
-            'error': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_bookings(request):
-    """
-    Retrieve all bookings for the authenticated user or all bookings if admin.
-    """
-    try:
-        bookings = Booking.objects.all()
-        serializer = BookingSerializer(bookings, many=True)
-        
-        return Response({
-            'success': True,
-            'data': serializer.data,
-            'count': len(serializer.data)
-        }, status=status.HTTP_200_OK)
-        
-    except Exception as e:
-        logger.error(f"Error retrieving bookings: {str(e)}")
-        return Response({
-            'success': False,
-            'message': 'Internal server error occurred while retrieving bookings',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
