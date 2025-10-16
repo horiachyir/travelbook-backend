@@ -1251,10 +1251,10 @@ def get_public_booking(request, link):
                 'phone': booking.created_by.phone,
             }
 
-        # Sales person data
+        # Sales person data - use full_name instead of ID for public endpoint
         sales_person_data = None
         if booking.sales_person:
-            sales_person_data = str(booking.sales_person.id)
+            sales_person_data = booking.sales_person.full_name
 
         # Compile complete booking data
         booking_data = {
