@@ -149,26 +149,10 @@ def create_booking(request):
                         'comments': booking_tour.comments,
                     })
 
-                # 3. Pricing data - calculated from tours
-                pricing_data = {
-                    'amount': float(total_amount),
-                    'currency': booking.currency,
-                    'breakdown': []
-                }
-
-                # 4. Payment details from booking_payments table (via booking_id FK)
+                # 3. Payment details from booking_payments table (via booking_id FK)
                 payments_data = []
 
                 for payment in booking.payment_details.all().order_by('-created_at'):
-                    # Get payment creator data from users table
-                    payment_created_by = None
-                    if payment.created_by:
-                        payment_created_by = {
-                            'id': str(payment.created_by.id),
-                            'email': payment.created_by.email,
-                            'fullName': payment.created_by.full_name,
-                        }
-
                     payments_data.append({
                         'id': payment.id,
                         'date': payment.date,
@@ -183,32 +167,10 @@ def create_booking(request):
                         'quoteComments': payment.quote_comments,
                         'sendPurchaseOrder': payment.send_purchase_order,
                         'sendQuotationAccess': payment.send_quotation_access,
-                        'createdBy': payment_created_by,
-                        'createdAt': payment.created_at,
-                        'updatedAt': payment.updated_at,
                     })
 
-                # 5. Sales person data from users table (via sales_person_id FK)
-                sales_person_data = None
-                if booking.sales_person:
-                    sales_person_data = {
-                        'id': str(booking.sales_person.id),
-                        'email': booking.sales_person.email,
-                        'fullName': booking.sales_person.full_name,
-                        'phone': booking.sales_person.phone,
-                        'role': booking.sales_person.role,
-                        'status': booking.sales_person.status,
-                    }
-
-                # 6. Created by user data from users table (via created_by FK)
-                created_by_data = None
-                if booking.created_by:
-                    created_by_data = {
-                        'id': str(booking.created_by.id),
-                        'email': booking.created_by.email,
-                        'fullName': booking.created_by.full_name,
-                        'phone': booking.created_by.phone,
-                    }
+                # Get most recent payment for paymentDetails field
+                payment_details_data = payments_data[0] if payments_data else None
 
                 # Compile complete booking data in the required format
                 booking_item = {
@@ -225,6 +187,7 @@ def create_booking(request):
                     'totalAmount': float(total_amount),
                     'customer': customer_data,                    # From customers table
                     'tours': tours_data,                          # From booking_tours, tours, destinations tables
+                    'paymentDetails': payment_details_data,       # From booking_payments table (most recent)
                 }
 
                 booking_data.append(booking_item)
