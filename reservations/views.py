@@ -463,6 +463,161 @@ def create_booking_payment(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_booking_payment(request, booking_id):
+    """
+    Handle PUT /api/booking/payment/{booking_id}/ requests.
+
+    This endpoint handles two scenarios:
+    1. If no payment record exists for this booking_id, create a new one (similar to POST)
+    2. If a payment record exists for this booking_id, update it
+
+    In both cases, update the booking status to 'confirmed'
+
+    Expected data structure:
+    {
+        "bookingOptions": {
+            "copyComments": true,
+            "includePayment": true,
+            "quoteComments": "",
+            "sendPurchaseOrder": true,
+            "sendQuotationAccess": true
+        },
+        "customer": {
+            "email": "david@gmail.com",
+            "name": "David",
+            "phone": "+56 5 6565 6564"
+        },
+        "paymentDetails": {
+            "amountPaid": 144,
+            "comments": "Good",
+            "date": "2025-09-11T21:00:00.000Z",
+            "method": "credit-card",
+            "percentage": 15,
+            "receiptFile": null,
+            "status": "pending"
+        }
+    }
+    """
+    try:
+        data = request.data
+
+        # Validate required fields
+        if 'bookingOptions' not in data or 'paymentDetails' not in data:
+            return Response({
+                'success': False,
+                'message': 'Missing required fields: bookingOptions and paymentDetails'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        booking_options = data['bookingOptions']
+        payment_details = data['paymentDetails']
+
+        # Get the booking by ID
+        try:
+            booking = Booking.objects.get(id=booking_id)
+        except Booking.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': f'Booking with ID {booking_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if payment record exists for this booking
+        try:
+            with transaction.atomic():
+                # Try to get existing payment record
+                existing_payment = BookingPayment.objects.filter(booking=booking).first()
+
+                if existing_payment:
+                    # Update existing payment record
+                    existing_payment.date = payment_details.get('date', existing_payment.date)
+                    existing_payment.method = payment_details.get('method', existing_payment.method)
+                    existing_payment.percentage = payment_details.get('percentage', existing_payment.percentage)
+                    existing_payment.amount_paid = payment_details.get('amountPaid', existing_payment.amount_paid)
+                    existing_payment.comments = payment_details.get('comments', existing_payment.comments)
+                    existing_payment.status = payment_details.get('status', existing_payment.status)
+                    existing_payment.receipt_file = payment_details.get('receiptFile', existing_payment.receipt_file)
+                    # Update booking options
+                    existing_payment.copy_comments = booking_options.get('copyComments', existing_payment.copy_comments)
+                    existing_payment.include_payment = booking_options.get('includePayment', existing_payment.include_payment)
+                    existing_payment.quote_comments = booking_options.get('quoteComments', existing_payment.quote_comments)
+                    existing_payment.send_purchase_order = booking_options.get('sendPurchaseOrder', existing_payment.send_purchase_order)
+                    existing_payment.send_quotation_access = booking_options.get('sendQuotationAccess', existing_payment.send_quotation_access)
+                    existing_payment.save()
+
+                    booking_payment = existing_payment
+                    action = 'updated'
+                    status_code = status.HTTP_200_OK
+
+                else:
+                    # Create new payment record
+                    booking_payment = BookingPayment.objects.create(
+                        booking=booking,
+                        date=payment_details.get('date'),
+                        method=payment_details.get('method'),
+                        percentage=payment_details.get('percentage'),
+                        amount_paid=payment_details.get('amountPaid'),
+                        comments=payment_details.get('comments', ''),
+                        status=payment_details.get('status', 'pending'),
+                        receipt_file=payment_details.get('receiptFile'),
+                        # Booking options
+                        copy_comments=booking_options.get('copyComments', True),
+                        include_payment=booking_options.get('includePayment', True),
+                        quote_comments=booking_options.get('quoteComments', ''),
+                        send_purchase_order=booking_options.get('sendPurchaseOrder', True),
+                        send_quotation_access=booking_options.get('sendQuotationAccess', True),
+                        created_by=request.user
+                    )
+
+                    action = 'created'
+                    status_code = status.HTTP_201_CREATED
+
+                # Update booking status to confirmed in both cases
+                booking.status = 'confirmed'
+                booking.save()
+
+                return Response({
+                    'success': True,
+                    'message': f'Payment details {action} successfully',
+                    'data': {
+                        'bookingId': str(booking.id),
+                        'reservationId': str(booking.id),  # For compatibility
+                        'purchaseOrderId': str(booking.id),  # For compatibility
+                        'paymentId': booking_payment.id,
+                        'status': 'confirmed',
+                        'payment': {
+                            'id': booking_payment.id,
+                            'booking_id': str(booking.id),
+                            'amount_paid': float(booking_payment.amount_paid),
+                            'method': booking_payment.method,
+                            'status': booking_payment.status,
+                            'date': booking_payment.date,
+                            'percentage': float(booking_payment.percentage),
+                        }
+                    }
+                }, status=status_code)
+
+        except Exception as e:
+            logger.error(f"Error creating/updating booking payment: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return Response({
+                'success': False,
+                'message': 'Error saving payment details',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except Exception as e:
+        logger.error(f"Error processing payment request: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Internal server error occurred while processing payment',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_booking(request, booking_id):

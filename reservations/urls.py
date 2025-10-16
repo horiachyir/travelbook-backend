@@ -2,8 +2,10 @@ from django.urls import path, re_path
 from . import views
 
 urlpatterns = [
-    # Payment endpoint (must come before booking/<uuid> patterns)
+    # Payment endpoints (must come before booking/<uuid> patterns)
     path('booking/payment/', views.create_booking_payment, name='create_booking_payment'),
+    path('booking/payment/<uuid:booking_id>/', views.update_booking_payment, name='update_booking_payment'),
+    re_path(r'^booking/payment/(?P<booking_id>[0-9a-f-]{36})/?$', views.update_booking_payment, name='update_booking_payment_flexible'),
 
     # GET/PUT/DELETE booking endpoint - support both with and without trailing slash
     path('booking/<uuid:booking_id>/', views.get_booking, name='get_booking'),

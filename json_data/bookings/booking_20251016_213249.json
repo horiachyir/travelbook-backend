@@ -1,0 +1,43 @@
+{
+  "config": {
+    "sales_person": "efc7ffd0-2beb-441a-9f24-315c191626fa",
+    "leadSource": "youtube",
+    "currency": "EUR"
+  },
+  "status": "pending",
+  "validUntil": "2025-11-15T21:31:34.456Z",
+  "quotationComments": "",
+  "sendQuotationAccess": true,
+  "shareableLink": "1760650367310-g7xa0z5gc54",
+  "customer": {
+    "name": "JiaoLing",
+    "email": "jiaoling@gmail.com",
+    "phone": "5678354644",
+    "language": "en",
+    "country": "China",
+    "idNumber": "324-3534-6",
+    "cpf": "444",
+    "address": "Beijing-55",
+    "hotel": "Hotel-333",
+    "room": "322",
+    "additionalNotes": ""
+  },
+  "tours": [
+    {
+      "tourId": "3ddfff81-4128-4d3e-b33e-8769ba6d318e",
+      "destination": "b7324bdd-9503-429f-af5c-def0a6030bba",
+      "date": "2025-10-17T21:00:00.000Z",
+      "pickupAddress": "sasa",
+      "pickupTime": "09:00:00",
+      "adultPax": 3,
+      "adultPrice": 135,
+      "childPax": 3,
+      "childPrice": 81,
+      "infantPax": 0,
+      "infantPrice": 0,
+      "subtotal": 648,
+      "operator": "own-operation",
+      "comments": ""
+    }
+  ]
+}
