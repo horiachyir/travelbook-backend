@@ -2,6 +2,10 @@ from django.urls import path, re_path
 from . import views
 
 urlpatterns = [
+    # Confirmed reservations endpoint
+    path('reservation/confirm/', views.get_confirmed_reservations, name='get_confirmed_reservations'),
+    re_path(r'^reservation/confirm/?$', views.get_confirmed_reservations, name='get_confirmed_reservations_no_slash'),
+
     # Payment endpoints (must come before booking/<uuid> patterns)
     path('booking/payment/', views.create_booking_payment, name='create_booking_payment'),
     path('booking/payment/<uuid:booking_id>/', views.update_booking_payment, name='update_booking_payment'),
