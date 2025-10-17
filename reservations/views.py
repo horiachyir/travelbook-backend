@@ -1118,6 +1118,148 @@ def get_confirmed_reservations(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_all_reservations_calendar(request):
+    """
+    Retrieve all bookings regardless of status for the reservation calendar.
+
+    GET /api/reservation/all/
+
+    This endpoint returns comprehensive data from:
+    - bookings table (ALL records, regardless of status)
+    - customers table (customer information)
+    - booking_tours table (tours associated with bookings)
+    - booking_payments table (payment records)
+
+    Returns the same data structure as GET /api/reservation/confirm/ but includes all statuses.
+    """
+    try:
+        # Get all bookings with related data using select_related and prefetch_related for optimization
+        bookings = Booking.objects.select_related(
+            'customer',           # Join customers table via customer_id
+            'sales_person',       # Join users table via sales_person_id
+            'created_by'          # Join users table via created_by
+        ).prefetch_related(
+            'booking_tours__tour',           # Join tours table via tour_id in booking_tours
+            'booking_tours__destination',    # Join destinations table via destination_id in booking_tours
+            'booking_tours__created_by',     # Join users table for tour creator
+            'payment_details__created_by'    # Join users table for payment creator
+        ).order_by('-created_at')  # No status filter - retrieve all bookings
+
+        booking_data = []
+
+        for booking in bookings:
+            # 1. Customer data from customers table (via customer_id FK)
+            customer_data = {
+                'id': str(booking.customer.id),
+                'name': booking.customer.name,
+                'email': booking.customer.email,
+                'phone': booking.customer.phone,
+                'language': booking.customer.language,
+                'country': booking.customer.country,
+                'idNumber': booking.customer.id_number,
+                'cpf': booking.customer.cpf,
+                'address': booking.customer.address,
+                'comments': booking.customer.comments,
+                'hotel': booking.customer.hotel,
+                'room': booking.customer.room,
+                'status': booking.customer.status,
+                'totalBookings': booking.customer.total_bookings,
+                'totalSpent': float(booking.customer.total_spent),
+                'lastBooking': booking.customer.last_booking,
+                'createdAt': booking.customer.created_at,
+                'updatedAt': booking.customer.updated_at,
+            }
+
+            # 2. Tours data from booking_tours table (via booking_id FK)
+            tours_data = []
+            total_amount = Decimal('0.00')
+
+            for booking_tour in booking.booking_tours.all():
+                tour_subtotal = float(booking_tour.subtotal)
+                total_amount += booking_tour.subtotal
+
+                tours_data.append({
+                    'id': str(booking_tour.id),
+                    'tourId': str(booking_tour.tour.id) if booking_tour.tour else None,
+                    'tourName': booking_tour.tour.name if booking_tour.tour else '',
+                    'destination': str(booking_tour.destination.id) if booking_tour.destination else None,
+                    'destinationName': booking_tour.destination.name if booking_tour.destination else '',
+                    'date': booking_tour.date,
+                    'pickupAddress': booking_tour.pickup_address,
+                    'pickupTime': booking_tour.pickup_time,
+                    'adultPax': booking_tour.adult_pax,
+                    'adultPrice': float(booking_tour.adult_price),
+                    'childPax': booking_tour.child_pax,
+                    'childPrice': float(booking_tour.child_price),
+                    'infantPax': booking_tour.infant_pax,
+                    'infantPrice': float(booking_tour.infant_price),
+                    'subtotal': tour_subtotal,
+                    'operator': booking_tour.operator,
+                    'comments': booking_tour.comments,
+                })
+
+            # 3. Payment details from booking_payments table (via booking_id FK)
+            payments_data = []
+
+            for payment in booking.payment_details.all().order_by('-created_at'):
+                payments_data.append({
+                    'id': payment.id,
+                    'date': payment.date,
+                    'method': payment.method,
+                    'percentage': float(payment.percentage),
+                    'amountPaid': float(payment.amount_paid),
+                    'comments': payment.comments,
+                    'status': payment.status,
+                    'receiptFile': payment.receipt_file.url if payment.receipt_file else None,
+                    'copyComments': payment.copy_comments,
+                    'includePayment': payment.include_payment,
+                    'quoteComments': payment.quote_comments,
+                    'sendPurchaseOrder': payment.send_purchase_order,
+                    'sendQuotationAccess': payment.send_quotation_access,
+                })
+
+            # Get most recent payment for paymentDetails field
+            payment_details_data = payments_data[0] if payments_data else None
+
+            # Compile complete booking data in the required format
+            booking_item = {
+                'id': str(booking.id),
+                'sales_person_id': str(booking.sales_person.id) if booking.sales_person else None,
+                'fullName': booking.sales_person.full_name if booking.sales_person else None,
+                'leadSource': booking.lead_source,
+                'currency': booking.currency,
+                'status': booking.status,
+                'validUntil': booking.valid_until,
+                'quotationComments': booking.quotation_comments,
+                'sendQuotationAccess': booking.send_quotation_access,
+                'shareableLink': booking.shareable_link,
+                'totalAmount': float(total_amount),
+                'customer': customer_data,                    # From customers table
+                'tours': tours_data,                          # From booking_tours, tours, destinations tables
+                'paymentDetails': payment_details_data,       # From booking_payments table (most recent)
+            }
+
+            booking_data.append(booking_item)
+
+        return Response({
+            'success': True,
+            'message': f'Retrieved {len(booking_data)} reservations successfully',
+            'data': booking_data,
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error retrieving all reservations: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error retrieving all reservations',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def get_public_booking(request, link):
     """

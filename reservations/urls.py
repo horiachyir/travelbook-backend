@@ -6,6 +6,10 @@ urlpatterns = [
     path('reservation/confirm/', views.get_confirmed_reservations, name='get_confirmed_reservations'),
     re_path(r'^reservation/confirm/?$', views.get_confirmed_reservations, name='get_confirmed_reservations_no_slash'),
 
+    # All reservations endpoint for calendar (regardless of status)
+    path('reservation/all/', views.get_all_reservations_calendar, name='get_all_reservations_calendar'),
+    re_path(r'^reservation/all/?$', views.get_all_reservations_calendar, name='get_all_reservations_calendar_no_slash'),
+
     # Payment endpoints (must come before booking/<uuid> patterns)
     path('booking/payment/', views.create_booking_payment, name='create_booking_payment'),
     path('booking/payment/<uuid:booking_id>/', views.update_booking_payment, name='update_booking_payment'),
