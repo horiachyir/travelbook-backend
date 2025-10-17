@@ -25,32 +25,39 @@ def signup(request):
     serializer = SignUpSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        
+
         # Generate verification token
         user.email_verification_token = get_random_string(64)
         user.email_verification_sent_at = timezone.now()
         user.save()
-        
-        # Send verification email
-        verification_url = f"{settings.FRONTEND_URL}/verify-email?token={user.email_verification_token}"
-        send_mail(
-            'Verify your email',
-            f'Please click this link to verify your email: {verification_url}',
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=True,
-        )
-        
+
+        # Try to send verification email, but don't fail signup if it errors
+        try:
+            verification_url = f"{settings.FRONTEND_URL}/verify-email?token={user.email_verification_token}"
+            send_mail(
+                'Verify your email',
+                f'Please click this link to verify your email: {verification_url}',
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+                timeout=5,  # 5 second timeout for email sending
+            )
+            email_message = 'User created successfully. Please check your email to verify your account.'
+        except Exception as e:
+            # Log the error but continue with signup
+            print(f"Email sending failed during signup: {str(e)}")
+            email_message = 'User created successfully. Email verification could not be sent at this time.'
+
         # Generate tokens
         refresh = RefreshToken.for_user(user)
-        
+
         return Response({
             'user': UserSerializer(user).data,
             'access': str(refresh.access_token),
             'refresh': str(refresh),
-            'message': 'User created successfully. Please check your email to verify your account.'
+            'message': email_message
         }, status=status.HTTP_201_CREATED)
-    
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -98,27 +105,32 @@ def forgot_password(request):
         email = serializer.validated_data['email']
         try:
             user = User.objects.get(email=email)
-            
+
             # Generate reset token
             user.reset_password_token = get_random_string(64)
             user.reset_password_sent_at = timezone.now()
             user.save()
-            
-            # Send reset email
-            reset_url = f"{settings.FRONTEND_URL}/reset-password?token={user.reset_password_token}"
-            send_mail(
-                'Reset your password',
-                f'Please click this link to reset your password: {reset_url}',
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
-            )
-            
+
+            # Try to send reset email with timeout
+            try:
+                reset_url = f"{settings.FRONTEND_URL}/reset-password?token={user.reset_password_token}"
+                send_mail(
+                    'Reset your password',
+                    f'Please click this link to reset your password: {reset_url}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                    timeout=5,  # 5 second timeout
+                )
+            except Exception as e:
+                # Log the error but still return success message
+                print(f"Email sending failed during password reset: {str(e)}")
+
             return Response({'message': 'Password reset email sent'}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
             pass
-    
-    return Response({'message': 'If an account exists with this email, you will receive a password reset link.'}, 
+
+    return Response({'message': 'If an account exists with this email, you will receive a password reset link.'},
                    status=status.HTTP_200_OK)
 
 
