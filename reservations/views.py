@@ -1440,3 +1440,256 @@ def get_public_booking(request, link):
             'message': 'Error retrieving booking data',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_dashboard_data(request):
+    """
+    Retrieve comprehensive dashboard data from all tables.
+
+    GET /api/dashboard/all-data/
+
+    Returns:
+    - Status alerts (overdue/pending payments)
+    - Key metrics (revenue, reservations, customers, PAX)
+    - Monthly sales data (current and previous 2 years)
+    - Monthly reservations and PAX data
+    - Recent reservations
+    """
+    try:
+        from django.db.models import Sum, Count, Q
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        from customers.models import Customer
+
+        current_year = timezone.now().year
+        current_date = timezone.now()
+
+        # ===== 1. STATUS ALERTS (Overdue/Pending Payments) =====
+        status_alerts = []
+        alert_id = 1
+
+        # Get bookings with payment issues
+        overdue_bookings = Booking.objects.filter(
+            payment_details__status='overdue'
+        ).select_related('customer').prefetch_related('payment_details').distinct()[:5]
+
+        for booking in overdue_bookings:
+            payment = booking.payment_details.filter(status='overdue').first()
+            if payment:
+                days_overdue = (current_date - payment.date).days if payment.date else 0
+                status_alerts.append({
+                    'id': alert_id,
+                    'type': 'overdue',
+                    'title': 'Overdue Payment',
+                    'description': f'Payment for {booking.customer.name} is {days_overdue} days overdue',
+                    'amount': f'${float(payment.amount_paid):.2f}' if payment.amount_paid else '$0.00',
+                    'daysOverdue': days_overdue
+                })
+                alert_id += 1
+
+        # Get pending payments due soon
+        pending_bookings = Booking.objects.filter(
+            payment_details__status__in=['pending', 'partial']
+        ).select_related('customer').prefetch_related('payment_details').distinct()[:5]
+
+        for booking in pending_bookings:
+            payment = booking.payment_details.filter(status__in=['pending', 'partial']).first()
+            if payment:
+                days_due = (payment.date - current_date).days if payment.date else 0
+                status_alerts.append({
+                    'id': alert_id,
+                    'type': 'pending',
+                    'title': 'Pending Payment',
+                    'description': f'Payment for {booking.customer.name} due soon',
+                    'amount': f'${float(payment.amount_paid):.2f}' if payment.amount_paid else '$0.00',
+                    'dueIn': max(days_due, 0)
+                })
+                alert_id += 1
+
+        # ===== 2. KEY METRICS =====
+
+        # Total Revenue (all time)
+        total_revenue = BookingPayment.objects.filter(
+            status='paid'
+        ).aggregate(total=Sum('amount_paid'))['total'] or 0
+
+        # Active Reservations (confirmed and pending)
+        active_reservations = Booking.objects.filter(
+            status__in=['confirmed', 'pending']
+        ).count()
+
+        # Total Customers
+        total_customers = Customer.objects.count()
+
+        # Total PAX (current year)
+        current_year_pax = BookingTour.objects.filter(
+            booking__created_at__year=current_year
+        ).aggregate(
+            total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
+        )['total'] or 0
+
+        # Calculate year-over-year changes (comparing to last year)
+        last_year = current_year - 1
+
+        # Last year revenue
+        last_year_revenue = BookingPayment.objects.filter(
+            status='paid',
+            created_at__year=last_year
+        ).aggregate(total=Sum('amount_paid'))['total'] or 1
+
+        revenue_change = ((total_revenue - last_year_revenue) / last_year_revenue * 100) if last_year_revenue > 0 else 0
+
+        # Last year reservations
+        last_year_reservations = Booking.objects.filter(
+            created_at__year=last_year,
+            status__in=['confirmed', 'pending']
+        ).count() or 1
+
+        current_year_reservations = Booking.objects.filter(
+            created_at__year=current_year,
+            status__in=['confirmed', 'pending']
+        ).count()
+
+        reservations_change = ((current_year_reservations - last_year_reservations) / last_year_reservations * 100) if last_year_reservations > 0 else 0
+
+        # Customer growth (last 12 months vs previous 12 months)
+        twelve_months_ago = current_date - timedelta(days=365)
+        twenty_four_months_ago = current_date - timedelta(days=730)
+
+        recent_customers = Customer.objects.filter(
+            created_at__gte=twelve_months_ago
+        ).count()
+
+        previous_customers = Customer.objects.filter(
+            created_at__gte=twenty_four_months_ago,
+            created_at__lt=twelve_months_ago
+        ).count() or 1
+
+        customers_change = ((recent_customers - previous_customers) / previous_customers * 100) if previous_customers > 0 else 0
+
+        # PAX change
+        last_year_pax = BookingTour.objects.filter(
+            booking__created_at__year=last_year
+        ).aggregate(
+            total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
+        )['total'] or 1
+
+        pax_change = ((current_year_pax - last_year_pax) / last_year_pax * 100) if last_year_pax > 0 else 0
+
+        metrics = {
+            'totalRevenue': {
+                'value': f'${float(total_revenue):,.2f}',
+                'change': f'{revenue_change:+.1f}%',
+                'trend': 'up' if revenue_change > 0 else 'down'
+            },
+            'activeReservations': {
+                'value': str(active_reservations),
+                'change': f'{reservations_change:+.1f}%',
+                'trend': 'up' if reservations_change > 0 else 'down'
+            },
+            'totalCustomers': {
+                'value': str(total_customers),
+                'change': f'{customers_change:+.1f}%',
+                'trend': 'up' if customers_change > 0 else 'down'
+            },
+            'totalPax': {
+                'value': str(current_year_pax),
+                'change': f'{pax_change:+.1f}%',
+                'trend': 'up' if pax_change > 0 else 'down'
+            }
+        }
+
+        # ===== 3. MONTHLY SALES DATA (3 years comparison) =====
+        monthly_sales = []
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+        for month_num in range(1, 13):
+            month_data = {'month': months[month_num - 1]}
+
+            for year in [current_year - 2, current_year - 1, current_year]:
+                revenue = BookingPayment.objects.filter(
+                    status='paid',
+                    date__year=year,
+                    date__month=month_num
+                ).aggregate(total=Sum('amount_paid'))['total'] or 0
+
+                month_data[str(year)] = float(revenue)
+
+            monthly_sales.append(month_data)
+
+        # ===== 4. MONTHLY RESERVATIONS & PAX DATA =====
+        monthly_reservations = []
+
+        for month_num in range(1, 13):
+            reservations_count = Booking.objects.filter(
+                created_at__year=current_year,
+                created_at__month=month_num
+            ).count()
+
+            pax_count = BookingTour.objects.filter(
+                booking__created_at__year=current_year,
+                booking__created_at__month=month_num
+            ).aggregate(
+                total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
+            )['total'] or 0
+
+            monthly_reservations.append({
+                'month': months[month_num - 1],
+                'reservations': reservations_count,
+                'pax': pax_count
+            })
+
+        # ===== 5. RECENT RESERVATIONS =====
+        recent_bookings = Booking.objects.select_related(
+            'customer'
+        ).prefetch_related(
+            'booking_tours__tour',
+            'booking_tours__destination'
+        ).order_by('-created_at')[:4]
+
+        recent_reservations = []
+        for booking in recent_bookings:
+            first_tour = booking.booking_tours.first()
+            if first_tour:
+                total_pax = booking.booking_tours.aggregate(
+                    total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
+                )['total'] or 0
+
+                total_amount = booking.booking_tours.aggregate(
+                    total=Sum('subtotal')
+                )['total'] or 0
+
+                recent_reservations.append({
+                    'id': str(booking.id),
+                    'customer': booking.customer.name,
+                    'destination': first_tour.tour.name if first_tour.tour else 'N/A',
+                    'date': first_tour.date.strftime('%Y-%m-%d') if first_tour.date else '',
+                    'status': booking.status,
+                    'amount': f'${float(total_amount):,.2f}',
+                    'pax': total_pax
+                })
+
+        # ===== RETURN RESPONSE =====
+        return Response({
+            'success': True,
+            'message': 'Dashboard data retrieved successfully',
+            'data': {
+                'statusAlerts': status_alerts,
+                'metrics': metrics,
+                'monthlySales': monthly_sales,
+                'monthlyReservations': monthly_reservations,
+                'recentReservations': recent_reservations
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error retrieving dashboard data: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error retrieving dashboard data',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

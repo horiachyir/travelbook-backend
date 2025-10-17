@@ -34,4 +34,8 @@ urlpatterns = [
     # Public booking endpoint - accessible without authentication
     path('public/booking/<str:link>/', views.get_public_booking, name='get_public_booking'),
     re_path(r'^public/booking/(?P<link>.+)/?$', views.get_public_booking, name='get_public_booking_flexible'),
+
+    # Dashboard data endpoint
+    path('dashboard/all-data/', views.get_dashboard_data, name='get_dashboard_data'),
+    re_path(r'^dashboard/all-data/?$', views.get_dashboard_data, name='get_dashboard_data_no_slash'),
 ]
