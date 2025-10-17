@@ -43,34 +43,48 @@ class BookingPaymentSerializer(serializers.Serializer):
 class CustomerBookingSerializer(serializers.Serializer):
     """Nested serializer for customer bookings"""
     id = serializers.UUIDField()
-    destination = serializers.CharField()
-    tour_type = serializers.CharField()
-    start_date = serializers.DateTimeField()
-    end_date = serializers.DateTimeField()
-    passengers = serializers.IntegerField()
-    total_adults = serializers.IntegerField()
-    total_children = serializers.IntegerField()
-    total_infants = serializers.IntegerField()
-    hotel = serializers.CharField()
-    room = serializers.CharField()
-    total_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     currency = serializers.CharField()
     lead_source = serializers.CharField()
-    assigned_to = serializers.CharField()
-    agency = serializers.CharField()
     status = serializers.CharField()
     valid_until = serializers.DateTimeField()
-    additional_notes = serializers.CharField()
-    has_multiple_addresses = serializers.BooleanField()
-    terms_accepted = serializers.BooleanField()
+    quotation_comments = serializers.CharField()
+    send_quotation_access = serializers.BooleanField()
     shareable_link = serializers.CharField()
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
+    # Computed fields
+    total_amount = serializers.SerializerMethodField()
+    destination = serializers.SerializerMethodField()
+    start_date = serializers.SerializerMethodField()
+    total_passengers = serializers.SerializerMethodField()
+
     # Related data
     booking_tours = BookingTourSerializer(many=True, read_only=True)
-    pricing_breakdown = BookingPricingBreakdownSerializer(many=True, read_only=True)
     payment_details = BookingPaymentSerializer(many=True, read_only=True)
+
+    def get_total_amount(self, obj):
+        """Calculate total amount from all booking tours"""
+        return sum(tour.subtotal for tour in obj.booking_tours.all())
+
+    def get_destination(self, obj):
+        """Get destination from first booking tour"""
+        first_tour = obj.booking_tours.first()
+        if first_tour and first_tour.destination:
+            return first_tour.destination.name
+        return None
+
+    def get_start_date(self, obj):
+        """Get earliest date from booking tours"""
+        first_tour = obj.booking_tours.first()
+        return first_tour.date if first_tour else None
+
+    def get_total_passengers(self, obj):
+        """Calculate total passengers from all booking tours"""
+        total = 0
+        for tour in obj.booking_tours.all():
+            total += tour.adult_pax + tour.child_pax + tour.infant_pax
+        return total
 
 
 class CustomerReservationSerializer(serializers.Serializer):
@@ -150,3 +164,16 @@ class CustomerUpdateSerializer(serializers.ModelSerializer):
             setattr(instance, field, value)
         instance.save()
         return instance
+
+
+class CustomerListSerializer(serializers.ModelSerializer):
+    """Simple serializer for listing customers - only data from customers table"""
+    class Meta:
+        model = Customer
+        fields = [
+            'id', 'created_by', 'name', 'email', 'phone', 'language', 'country',
+            'id_number', 'cpf', 'address', 'hotel', 'room', 'comments',
+            'status', 'total_bookings', 'total_spent', 'last_booking',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_by', 'total_bookings', 'total_spent', 'last_booking', 'created_at', 'updated_at']

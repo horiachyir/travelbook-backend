@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Customer
-from .serializers import CustomerSerializer, CustomerCreateSerializer, CustomerUpdateSerializer
+from .serializers import CustomerSerializer, CustomerCreateSerializer, CustomerUpdateSerializer, CustomerListSerializer
 
 
 @api_view(['POST'])
@@ -25,18 +25,14 @@ class CustomerListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only customers created by the current user with all related data
-        return Customer.objects.filter(created_by=self.request.user).prefetch_related(
-            'bookings__booking_tours',
-            'bookings__pricing_breakdown',
-            'bookings__payment_details',
-            'reservations'
-        ).select_related('created_by')
+        # Return only customers from the customers table
+        return Customer.objects.filter(created_by=self.request.user).select_related('created_by')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return CustomerCreateSerializer
-        return CustomerSerializer
+        # Use CustomerListSerializer for GET - only customers table data
+        return CustomerListSerializer
 
     def perform_create(self, serializer):
         # Set the created_by to the current authenticated user
@@ -47,26 +43,22 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only customers created by the current user with all related data
-        return Customer.objects.filter(created_by=self.request.user).prefetch_related(
-            'bookings__booking_tours',
-            'bookings__pricing_breakdown',
-            'bookings__payment_details',
-            'reservations'
-        ).select_related('created_by')
+        # Return only customers from the customers table
+        return Customer.objects.filter(created_by=self.request.user).select_related('created_by')
 
     def get_serializer_class(self):
         """Use different serializers for different operations"""
         if self.request.method in ['PUT', 'PATCH']:
             return CustomerUpdateSerializer
-        return CustomerSerializer
+        # Use CustomerListSerializer for GET - only customers table data
+        return CustomerListSerializer
 
     def perform_update(self, serializer):
         """Ensure created_by field is not modified during updates"""
         serializer.save()
 
     def update(self, request, *args, **kwargs):
-        """Override update to return full customer data after update"""
+        """Override update to return customer data after update"""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
@@ -75,8 +67,8 @@ class CustomerDetailView(generics.RetrieveUpdateDestroyAPIView):
         update_serializer.is_valid(raise_exception=True)
         updated_instance = update_serializer.save()
 
-        # Return full customer data using the read serializer
-        response_serializer = CustomerSerializer(updated_instance)
+        # Return customer data using the list serializer (customers table only)
+        response_serializer = CustomerListSerializer(updated_instance)
         return Response(response_serializer.data)
 
     def destroy(self, request, *args, **kwargs):
