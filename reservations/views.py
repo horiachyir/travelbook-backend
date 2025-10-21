@@ -1080,11 +1080,22 @@ def get_confirmed_reservations(request):
             # Get most recent payment for paymentDetails field
             payment_details_data = payments_data[0] if payments_data else None
 
+            # Debug: Log sales_person data
+            if booking.sales_person:
+                logger.info(f"Sales person data for booking {booking.id}: "
+                           f"full_name={booking.sales_person.full_name}, "
+                           f"email={booking.sales_person.email}, "
+                           f"phone={booking.sales_person.phone}")
+            else:
+                logger.info(f"No sales person for booking {booking.id}")
+
             # Compile complete booking data in the required format
             booking_item = {
                 'id': str(booking.id),
                 'sales_person_id': str(booking.sales_person.id) if booking.sales_person else None,
                 'fullName': booking.sales_person.full_name if booking.sales_person else None,
+                'email': booking.sales_person.email if booking.sales_person else None,
+                'phone': booking.sales_person.phone if booking.sales_person else None,
                 'leadSource': booking.lead_source,
                 'currency': booking.currency,
                 'status': booking.status,
@@ -1227,6 +1238,8 @@ def get_all_reservations_calendar(request):
                 'id': str(booking.id),
                 'sales_person_id': str(booking.sales_person.id) if booking.sales_person else None,
                 'fullName': booking.sales_person.full_name if booking.sales_person else None,
+                'email': booking.sales_person.email if booking.sales_person else None,
+                'phone': booking.sales_person.phone if booking.sales_person else None,
                 'leadSource': booking.lead_source,
                 'currency': booking.currency,
                 'status': booking.status,
