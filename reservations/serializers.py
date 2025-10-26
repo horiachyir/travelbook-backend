@@ -16,7 +16,9 @@ class BookingTourSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tour', 'destination', 'date', 'pickup_address', 'pickup_time',
             'adult_pax', 'adult_price', 'child_pax', 'child_price',
-            'infant_pax', 'infant_price', 'subtotal', 'operator', 'comments'
+            'infant_pax', 'infant_price', 'subtotal', 'operator', 'comments',
+            'tour_status', 'cancellation_reason', 'cancellation_fee',
+            'cancellation_observation', 'cancelled_at', 'checked_in_at'
         ]
 
 

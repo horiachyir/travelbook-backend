@@ -38,4 +38,9 @@ urlpatterns = [
     # Dashboard data endpoint
     path('dashboard/all-data/', views.get_dashboard_data, name='get_dashboard_data'),
     re_path(r'^dashboard/all-data/?$', views.get_dashboard_data, name='get_dashboard_data_no_slash'),
+
+    # Booking tour action endpoints
+    path('booking-tour/<uuid:tour_id>/cancel/', views.cancel_booking_tour, name='cancel_booking_tour'),
+    path('booking-tour/<uuid:tour_id>/checkin/', views.checkin_booking_tour, name='checkin_booking_tour'),
+    path('booking-tour/<uuid:tour_id>/noshow/', views.noshow_booking_tour, name='noshow_booking_tour'),
 ]

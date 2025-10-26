@@ -76,6 +76,21 @@ class BookingTour(models.Model):
         ('third-party', 'Third Party'),
     ]
 
+    TOUR_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('checked-in', 'Checked In'),
+        ('cancelled', 'Cancelled'),
+        ('no-show', 'No Show'),
+        ('completed', 'Completed'),
+    ]
+
+    CANCELLATION_REASON_CHOICES = [
+        ('trip-cancellation', 'Trip Cancellation [70% Retention]'),
+        ('no-change-acceptance', 'Does not accept change suggestions [100% Retention]'),
+        ('bad-weather', 'Bad weather [0% Retention]'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='booking_tours')
 
@@ -99,6 +114,20 @@ class BookingTour(models.Model):
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     operator = models.CharField(max_length=100, choices=OPERATOR_CHOICES, default='own-operation')
     comments = models.TextField(blank=True)
+
+    # Tour-specific status tracking
+    tour_status = models.CharField(max_length=20, choices=TOUR_STATUS_CHOICES, default='pending')
+
+    # Cancellation details
+    cancellation_reason = models.CharField(max_length=100, choices=CANCELLATION_REASON_CHOICES, blank=True, null=True)
+    cancellation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    cancellation_observation = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_booking_tours')
+
+    # Check-in tracking
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    checked_in_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='checkedin_booking_tours')
 
     # User tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_tours')

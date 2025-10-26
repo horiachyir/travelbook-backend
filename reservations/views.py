@@ -17,6 +17,40 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+def serialize_booking_tour(booking_tour):
+    """
+    Helper function to serialize BookingTour object with all fields including new status fields.
+    """
+    tour_subtotal = float(booking_tour.subtotal)
+
+    return {
+        'id': str(booking_tour.id),
+        'tourId': str(booking_tour.tour.id) if booking_tour.tour else None,
+        'tourName': booking_tour.tour.name if booking_tour.tour else '',
+        'destination': str(booking_tour.destination.id) if booking_tour.destination else None,
+        'destinationName': booking_tour.destination.name if booking_tour.destination else '',
+        'date': booking_tour.date,
+        'pickupAddress': booking_tour.pickup_address,
+        'pickupTime': booking_tour.pickup_time,
+        'adultPax': booking_tour.adult_pax,
+        'adultPrice': float(booking_tour.adult_price),
+        'childPax': booking_tour.child_pax,
+        'childPrice': float(booking_tour.child_price),
+        'infantPax': booking_tour.infant_pax,
+        'infantPrice': float(booking_tour.infant_price),
+        'subtotal': tour_subtotal,
+        'operator': booking_tour.operator,
+        'comments': booking_tour.comments,
+        # New tour status and cancellation fields
+        'tour_status': booking_tour.tour_status,
+        'cancellation_reason': booking_tour.cancellation_reason,
+        'cancellation_fee': float(booking_tour.cancellation_fee) if booking_tour.cancellation_fee else 0,
+        'cancellation_observation': booking_tour.cancellation_observation,
+        'cancelled_at': booking_tour.cancelled_at.isoformat() if booking_tour.cancelled_at else None,
+        'checked_in_at': booking_tour.checked_in_at.isoformat() if booking_tour.checked_in_at else None,
+    }
+
+
 def save_booking_to_json(booking_data, booking_id=None):
     """
     Save booking data to a JSON file in the json_data directory.
@@ -126,28 +160,8 @@ def create_booking(request):
                 total_amount = Decimal('0.00')
 
                 for booking_tour in booking.booking_tours.all():
-                    tour_subtotal = float(booking_tour.subtotal)
                     total_amount += booking_tour.subtotal
-
-                    tours_data.append({
-                        'id': str(booking_tour.id),
-                        'tourId': str(booking_tour.tour.id) if booking_tour.tour else None,
-                        'tourName': booking_tour.tour.name if booking_tour.tour else '',
-                        'destination': str(booking_tour.destination.id) if booking_tour.destination else None,
-                        'destinationName': booking_tour.destination.name if booking_tour.destination else '',
-                        'date': booking_tour.date,
-                        'pickupAddress': booking_tour.pickup_address,
-                        'pickupTime': booking_tour.pickup_time,
-                        'adultPax': booking_tour.adult_pax,
-                        'adultPrice': float(booking_tour.adult_price),
-                        'childPax': booking_tour.child_pax,
-                        'childPrice': float(booking_tour.child_price),
-                        'infantPax': booking_tour.infant_pax,
-                        'infantPrice': float(booking_tour.infant_price),
-                        'subtotal': tour_subtotal,
-                        'operator': booking_tour.operator,
-                        'comments': booking_tour.comments,
-                    })
+                    tours_data.append(serialize_booking_tour(booking_tour))
 
                 # 3. Payment details from booking_payments table (via booking_id FK)
                 payments_data = []
@@ -724,31 +738,13 @@ def get_all_reservations(request):
             tours_data = []
             total_amount = Decimal('0.00')
             for tour in booking.booking_tours.all():
-                tour_subtotal = float(tour.subtotal)
                 total_amount += tour.subtotal
-
-                tours_data.append({
-                    'id': str(tour.id),  # Explicitly convert UUID to string
-                    'tourId': str(tour.tour.id) if tour.tour else None,
-                    'tourName': tour.tour.name if tour.tour else '',
-                    'destination': str(tour.destination.id) if tour.destination else None,
-                    'destinationName': tour.destination.name if tour.destination else '',
-                    'date': tour.date,
-                    'pickupAddress': tour.pickup_address,
-                    'pickupTime': tour.pickup_time,
-                    'adultPax': tour.adult_pax,
-                    'adultPrice': float(tour.adult_price),
-                    'childPax': tour.child_pax,
-                    'childPrice': float(tour.child_price),
-                    'infantPax': tour.infant_pax,
-                    'infantPrice': float(tour.infant_price),
-                    'subtotal': tour_subtotal,
-                    'operator': tour.operator,
-                    'comments': tour.comments,
-                    'createdBy': str(tour.created_by.id) if tour.created_by else None,
-                    'createdAt': tour.created_at,
-                    'updatedAt': tour.updated_at,
-                })
+                tour_data = serialize_booking_tour(tour)
+                # Add extra fields for this specific endpoint
+                tour_data['createdBy'] = str(tour.created_by.id) if tour.created_by else None
+                tour_data['createdAt'] = tour.created_at
+                tour_data['updatedAt'] = tour.updated_at
+                tours_data.append(tour_data)
             
             # Pricing data - calculate from tours
             pricing_data = {
@@ -1034,28 +1030,8 @@ def get_confirmed_reservations(request):
             total_amount = Decimal('0.00')
 
             for booking_tour in booking.booking_tours.all():
-                tour_subtotal = float(booking_tour.subtotal)
                 total_amount += booking_tour.subtotal
-
-                tours_data.append({
-                    'id': str(booking_tour.id),
-                    'tourId': str(booking_tour.tour.id) if booking_tour.tour else None,
-                    'tourName': booking_tour.tour.name if booking_tour.tour else '',
-                    'destination': str(booking_tour.destination.id) if booking_tour.destination else None,
-                    'destinationName': booking_tour.destination.name if booking_tour.destination else '',
-                    'date': booking_tour.date,
-                    'pickupAddress': booking_tour.pickup_address,
-                    'pickupTime': booking_tour.pickup_time,
-                    'adultPax': booking_tour.adult_pax,
-                    'adultPrice': float(booking_tour.adult_price),
-                    'childPax': booking_tour.child_pax,
-                    'childPrice': float(booking_tour.child_price),
-                    'infantPax': booking_tour.infant_pax,
-                    'infantPrice': float(booking_tour.infant_price),
-                    'subtotal': tour_subtotal,
-                    'operator': booking_tour.operator,
-                    'comments': booking_tour.comments,
-                })
+                tours_data.append(serialize_booking_tour(booking_tour))
 
             # 3. Payment details from booking_payments table (via booking_id FK)
             payments_data = []
@@ -1187,28 +1163,8 @@ def get_all_reservations_calendar(request):
             total_amount = Decimal('0.00')
 
             for booking_tour in booking.booking_tours.all():
-                tour_subtotal = float(booking_tour.subtotal)
                 total_amount += booking_tour.subtotal
-
-                tours_data.append({
-                    'id': str(booking_tour.id),
-                    'tourId': str(booking_tour.tour.id) if booking_tour.tour else None,
-                    'tourName': booking_tour.tour.name if booking_tour.tour else '',
-                    'destination': str(booking_tour.destination.id) if booking_tour.destination else None,
-                    'destinationName': booking_tour.destination.name if booking_tour.destination else '',
-                    'date': booking_tour.date,
-                    'pickupAddress': booking_tour.pickup_address,
-                    'pickupTime': booking_tour.pickup_time,
-                    'adultPax': booking_tour.adult_pax,
-                    'adultPrice': float(booking_tour.adult_price),
-                    'childPax': booking_tour.child_pax,
-                    'childPrice': float(booking_tour.child_price),
-                    'infantPax': booking_tour.infant_pax,
-                    'infantPrice': float(booking_tour.infant_price),
-                    'subtotal': tour_subtotal,
-                    'operator': booking_tour.operator,
-                    'comments': booking_tour.comments,
-                })
+                tours_data.append(serialize_booking_tour(booking_tour))
 
             # 3. Payment details from booking_payments table (via booking_id FK)
             payments_data = []
@@ -1323,30 +1279,12 @@ def get_public_booking(request, link):
         tours_data = []
         total_amount = Decimal('0.00')
         for tour in booking.booking_tours.all():
-            tour_subtotal = float(tour.subtotal)
             total_amount += tour.subtotal
-
-            tours_data.append({
-                'id': str(tour.id),  # Explicitly convert UUID to string
-                'tourId': str(tour.tour.id) if tour.tour else None,
-                'tourName': tour.tour.name if tour.tour else '',
-                'destination': str(tour.destination.id) if tour.destination else None,
-                'destinationName': tour.destination.name if tour.destination else '',
-                'date': tour.date,
-                'pickupAddress': tour.pickup_address,
-                'pickupTime': tour.pickup_time,
-                'adultPax': tour.adult_pax,
-                'adultPrice': float(tour.adult_price),
-                'childPax': tour.child_pax,
-                'childPrice': float(tour.child_price),
-                'infantPax': tour.infant_pax,
-                'infantPrice': float(tour.infant_price),
-                'subtotal': tour_subtotal,
-                'operator': tour.operator,
-                'comments': tour.comments,
-                'createdAt': tour.created_at,
-                'updatedAt': tour.updated_at,
-            })
+            tour_data = serialize_booking_tour(tour)
+            # Add extra fields for this specific endpoint
+            tour_data['createdAt'] = tour.created_at
+            tour_data['updatedAt'] = tour.updated_at
+            tours_data.append(tour_data)
 
         # Pricing data - calculate from tours
         pricing_data = {
@@ -1704,5 +1642,158 @@ def get_dashboard_data(request):
         return Response({
             'success': False,
             'message': 'Error retrieving dashboard data',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def cancel_booking_tour(request, tour_id):
+    """
+    Cancel a specific tour within a booking with cancellation details.
+
+    Expected request body:
+    {
+        "reason": "trip-cancellation" | "no-change-acceptance" | "bad-weather",
+        "fee": 0.00,
+        "observation": "Optional notes"
+    }
+    """
+    try:
+        # Get the booking tour
+        booking_tour = BookingTour.objects.select_related('booking').get(id=tour_id)
+
+        # Validate request data
+        reason = request.data.get('reason')
+        fee = request.data.get('fee', 0)
+        observation = request.data.get('observation', '')
+
+        if not reason:
+            return Response({
+                'success': False,
+                'message': 'Cancellation reason is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update the booking tour with cancellation details
+        booking_tour.tour_status = 'cancelled'
+        booking_tour.cancellation_reason = reason
+        booking_tour.cancellation_fee = Decimal(str(fee))
+        booking_tour.cancellation_observation = observation
+        booking_tour.cancelled_at = timezone.now()
+        booking_tour.cancelled_by = request.user
+        booking_tour.save()
+
+        logger.info(f"Booking tour {tour_id} cancelled by {request.user.email}")
+
+        return Response({
+            'success': True,
+            'message': 'Tour cancelled successfully',
+            'data': {
+                'id': str(booking_tour.id),
+                'tour_status': booking_tour.tour_status,
+                'cancellation_reason': booking_tour.cancellation_reason,
+                'cancellation_fee': float(booking_tour.cancellation_fee),
+                'cancellation_observation': booking_tour.cancellation_observation,
+                'cancelled_at': booking_tour.cancelled_at.isoformat() if booking_tour.cancelled_at else None
+            }
+        }, status=status.HTTP_200_OK)
+
+    except BookingTour.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Booking tour not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error cancelling booking tour: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error cancelling tour',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def checkin_booking_tour(request, tour_id):
+    """
+    Mark a specific tour as checked-in.
+    """
+    try:
+        # Get the booking tour
+        booking_tour = BookingTour.objects.select_related('booking').get(id=tour_id)
+
+        # Update the booking tour status to checked-in
+        booking_tour.tour_status = 'checked-in'
+        booking_tour.checked_in_at = timezone.now()
+        booking_tour.checked_in_by = request.user
+        booking_tour.save()
+
+        logger.info(f"Booking tour {tour_id} checked-in by {request.user.email}")
+
+        return Response({
+            'success': True,
+            'message': 'Tour checked-in successfully',
+            'data': {
+                'id': str(booking_tour.id),
+                'tour_status': booking_tour.tour_status,
+                'checked_in_at': booking_tour.checked_in_at.isoformat() if booking_tour.checked_in_at else None
+            }
+        }, status=status.HTTP_200_OK)
+
+    except BookingTour.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Booking tour not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error checking-in booking tour: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error checking-in tour',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def noshow_booking_tour(request, tour_id):
+    """
+    Mark a specific tour as no-show.
+    """
+    try:
+        # Get the booking tour
+        booking_tour = BookingTour.objects.select_related('booking').get(id=tour_id)
+
+        # Update the booking tour status to no-show
+        booking_tour.tour_status = 'no-show'
+        booking_tour.save()
+
+        logger.info(f"Booking tour {tour_id} marked as no-show by {request.user.email}")
+
+        return Response({
+            'success': True,
+            'message': 'Tour marked as no-show successfully',
+            'data': {
+                'id': str(booking_tour.id),
+                'tour_status': booking_tour.tour_status
+            }
+        }, status=status.HTTP_200_OK)
+
+    except BookingTour.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Booking tour not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error marking booking tour as no-show: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error marking tour as no-show',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
