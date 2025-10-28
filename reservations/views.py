@@ -1797,3 +1797,198 @@ def noshow_booking_tour(request, tour_id):
             'message': 'Error marking tour as no-show',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_booking_tour(request, tour_id):
+    """
+    Update an existing booking tour.
+
+    Expected request body:
+    {
+        "tourId": "tour-uuid",
+        "destinationId": "destination-uuid",
+        "date": "2025-10-25T10:00:00Z",
+        "pickupAddress": "Hotel Address",
+        "pickupTime": "08:00",
+        "adultPax": 2,
+        "adultPrice": 75.00,
+        "childPax": 1,
+        "childPrice": 50.00,
+        "infantPax": 0,
+        "infantPrice": 0,
+        "comments": "Special requests",
+        "operator": "own-operation"
+    }
+    """
+    try:
+        # Get the booking tour
+        booking_tour = BookingTour.objects.select_related('booking', 'tour', 'destination').get(id=tour_id)
+
+        # Update fields from request data
+        tour_id_new = request.data.get('tourId')
+        destination_id = request.data.get('destinationId')
+        date = request.data.get('date')
+        pickup_address = request.data.get('pickupAddress', '')
+        pickup_time = request.data.get('pickupTime', '')
+        adult_pax = request.data.get('adultPax', 0)
+        adult_price = request.data.get('adultPrice', 0)
+        child_pax = request.data.get('childPax', 0)
+        child_price = request.data.get('childPrice', 0)
+        infant_pax = request.data.get('infantPax', 0)
+        infant_price = request.data.get('infantPrice', 0)
+        comments = request.data.get('comments', '')
+        operator = request.data.get('operator', 'own-operation')
+
+        # Update the booking tour
+        if tour_id_new:
+            from tours.models import Tour
+            booking_tour.tour = Tour.objects.get(id=tour_id_new)
+
+        if destination_id:
+            from settings_app.models import Destination
+            booking_tour.destination = Destination.objects.get(id=destination_id)
+
+        if date:
+            from datetime import datetime
+            booking_tour.date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+
+        booking_tour.pickup_address = pickup_address
+        booking_tour.pickup_time = pickup_time
+        booking_tour.adult_pax = adult_pax
+        booking_tour.adult_price = Decimal(str(adult_price))
+        booking_tour.child_pax = child_pax
+        booking_tour.child_price = Decimal(str(child_price))
+        booking_tour.infant_pax = infant_pax
+        booking_tour.infant_price = Decimal(str(infant_price))
+        booking_tour.comments = comments
+        booking_tour.operator = operator
+
+        # Calculate and update subtotal
+        booking_tour.subtotal = (
+            booking_tour.adult_pax * booking_tour.adult_price +
+            booking_tour.child_pax * booking_tour.child_price +
+            booking_tour.infant_pax * booking_tour.infant_price
+        )
+
+        booking_tour.save()
+
+        logger.info(f"Booking tour {tour_id} updated by {request.user.email}")
+
+        return Response({
+            'success': True,
+            'message': 'Tour updated successfully',
+            'data': serialize_booking_tour(booking_tour)
+        }, status=status.HTTP_200_OK)
+
+    except BookingTour.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Booking tour not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error updating booking tour: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error updating tour',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def add_tour_to_booking(request, booking_id):
+    """
+    Add a new tour to an existing booking.
+
+    Expected request body: Same as update_booking_tour
+    """
+    try:
+        # Get the booking
+        booking = Booking.objects.get(id=booking_id)
+
+        # Get required data from request
+        tour_id = request.data.get('tourId')
+        destination_id = request.data.get('destinationId')
+        date = request.data.get('date')
+        pickup_address = request.data.get('pickupAddress', '')
+        pickup_time = request.data.get('pickupTime', '')
+        adult_pax = request.data.get('adultPax', 0)
+        adult_price = request.data.get('adultPrice', 0)
+        child_pax = request.data.get('childPax', 0)
+        child_price = request.data.get('childPrice', 0)
+        infant_pax = request.data.get('infantPax', 0)
+        infant_price = request.data.get('infantPrice', 0)
+        comments = request.data.get('comments', '')
+        operator = request.data.get('operator', 'own-operation')
+
+        if not tour_id:
+            return Response({
+                'success': False,
+                'message': 'Tour ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get tour and destination
+        from tours.models import Tour
+        from settings_app.models import Destination
+
+        tour = Tour.objects.get(id=tour_id)
+        destination = Destination.objects.get(id=destination_id) if destination_id else None
+
+        # Parse date
+        from datetime import datetime
+        tour_date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+
+        # Calculate subtotal
+        subtotal = (
+            adult_pax * Decimal(str(adult_price)) +
+            child_pax * Decimal(str(child_price)) +
+            infant_pax * Decimal(str(infant_price))
+        )
+
+        # Create new booking tour
+        booking_tour = BookingTour.objects.create(
+            booking=booking,
+            tour=tour,
+            destination=destination,
+            date=tour_date,
+            pickup_address=pickup_address,
+            pickup_time=pickup_time,
+            adult_pax=adult_pax,
+            adult_price=Decimal(str(adult_price)),
+            child_pax=child_pax,
+            child_price=Decimal(str(child_price)),
+            infant_pax=infant_pax,
+            infant_price=Decimal(str(infant_price)),
+            subtotal=subtotal,
+            operator=operator,
+            comments=comments,
+            created_by=request.user
+        )
+
+        logger.info(f"New tour added to booking {booking_id} by {request.user.email}")
+
+        return Response({
+            'success': True,
+            'message': 'Tour added successfully',
+            'data': serialize_booking_tour(booking_tour)
+        }, status=status.HTTP_201_CREATED)
+
+    except Booking.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Booking not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error adding tour to booking: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error adding tour',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

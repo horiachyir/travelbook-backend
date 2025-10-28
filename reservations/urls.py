@@ -43,4 +43,6 @@ urlpatterns = [
     path('booking-tour/<uuid:tour_id>/cancel/', views.cancel_booking_tour, name='cancel_booking_tour'),
     path('booking-tour/<uuid:tour_id>/checkin/', views.checkin_booking_tour, name='checkin_booking_tour'),
     path('booking-tour/<uuid:tour_id>/noshow/', views.noshow_booking_tour, name='noshow_booking_tour'),
+    path('booking-tour/<uuid:tour_id>/update/', views.update_booking_tour, name='update_booking_tour'),
+    path('booking/<uuid:booking_id>/add-tour/', views.add_tour_to_booking, name='add_tour_to_booking'),
 ]
