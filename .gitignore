@@ -65,4 +65,4 @@ celerybeat-schedule
 celerybeat.pid
 
 # Documentation
-docs/_build/logistics_data/
+docs/_build/
