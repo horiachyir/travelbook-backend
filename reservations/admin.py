@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Booking, BookingTour, BookingPayment, Reservation
+from .models import Booking, BookingTour, BookingPayment, Passenger
 
 
 class BookingTourInline(admin.TabularInline):
@@ -64,13 +64,13 @@ class BookingPaymentAdmin(admin.ModelAdmin):
     readonly_fields = ['created_by', 'created_at', 'updated_at']
 
 
-# Keep the original Reservation admin if it exists
-if hasattr(admin.site, '_registry') and Reservation not in admin.site._registry:
-    @admin.register(Reservation)
-    class ReservationAdmin(admin.ModelAdmin):
-        list_display = [
-            'reservation_number', 'customer', 'tour', 'operation_date',
-            'status', 'payment_status', 'total_amount'
-        ]
-        list_filter = ['status', 'payment_status', 'operation_date']
-        search_fields = ['reservation_number', 'customer__name', 'tour__name']
+# Register Passenger model
+@admin.register(Passenger)
+class PassengerAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'booking_tour', 'pax_number', 'name',
+        'telephone', 'age', 'gender', 'nationality'
+    ]
+    list_filter = ['gender', 'nationality', 'created_at']
+    search_fields = ['name', 'telephone', 'booking_tour__id']
+    readonly_fields = ['created_at', 'updated_at']
