@@ -1082,7 +1082,8 @@ def get_confirmed_reservations(request):
                 'totalAmount': float(total_amount),
                 'customer': customer_data,                    # From customers table
                 'tours': tours_data,                          # From booking_tours, tours, destinations tables
-                'paymentDetails': payment_details_data,       # From booking_payments table (most recent)
+                'paymentDetails': payment_details_data,       # From booking_payments table (most recent, for backward compatibility)
+                'allPayments': payments_data,                 # From booking_payments table (all payments)
             }
 
             booking_data.append(booking_item)
@@ -1206,7 +1207,8 @@ def get_all_reservations_calendar(request):
                 'totalAmount': float(total_amount),
                 'customer': customer_data,                    # From customers table
                 'tours': tours_data,                          # From booking_tours, tours, destinations tables
-                'paymentDetails': payment_details_data,       # From booking_payments table (most recent)
+                'paymentDetails': payment_details_data,       # From booking_payments table (most recent, for backward compatibility)
+                'allPayments': payments_data,                 # From booking_payments table (all payments)
             }
 
             booking_data.append(booking_item)
