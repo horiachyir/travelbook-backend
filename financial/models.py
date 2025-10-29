@@ -43,13 +43,18 @@ class Expense(models.Model):
     ]
 
     PAYMENT_METHOD_CHOICES = [
-        ('credit-card', 'Credit Card'),
-        ('debit-card', 'Debit Card'),
-        ('bank-transfer', 'Bank Transfer'),
-        ('cash', 'Cash'),
-        ('check', 'Check'),
-        ('paypal', 'PayPal'),
-        ('other', 'Other'),
+        ('pagarme-brl', 'Pagar.me (BRL)'),
+        ('sicred-pix-brl', 'Sicred – Pix (BRL)'),
+        ('cash-brl', 'Cash (BRL)'),
+        ('cash-ars', 'Cash (ARS)'),
+        ('cash-usd', 'Cash (USD)'),
+        ('asaas-brl', 'Asaas (BRL)'),
+        ('santander-ar', 'Santander (AR)'),
+        ('wise-brl', 'Wise (BRL)'),
+        ('wise-usd', 'Wise (USD)'),
+        ('wise-eur', 'Wise (EUR)'),
+        ('wise-clp', 'Wise (CLP)'),
+        ('mercado-pago-ar', 'Mercado Pago (AR)'),
     ]
 
     RECURRENCE_CHOICES = [
@@ -76,7 +81,7 @@ class Expense(models.Model):
 
     # Payment Information
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, null=True)
+    payment_method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES, blank=True, null=True)
     payment_date = models.DateField(blank=True, null=True, help_text="When the expense was paid")
     due_date = models.DateField(help_text="When the expense is due")
 

@@ -145,13 +145,18 @@ class BookingTour(models.Model):
 class BookingPayment(models.Model):
     """Payment details for a booking"""
     PAYMENT_METHOD_CHOICES = [
-        ('credit-card', 'Credit Card'),
-        ('debit-card', 'Debit Card'),
-        ('bank-transfer', 'Bank Transfer'),
-        ('cash', 'Cash'),
-        ('check', 'Check'),
-        ('paypal', 'PayPal'),
-        ('other', 'Other'),
+        ('pagarme-brl', 'Pagar.me (BRL)'),
+        ('sicred-pix-brl', 'Sicred – Pix (BRL)'),
+        ('cash-brl', 'Cash (BRL)'),
+        ('cash-ars', 'Cash (ARS)'),
+        ('cash-usd', 'Cash (USD)'),
+        ('asaas-brl', 'Asaas (BRL)'),
+        ('santander-ar', 'Santander (AR)'),
+        ('wise-brl', 'Wise (BRL)'),
+        ('wise-usd', 'Wise (USD)'),
+        ('wise-eur', 'Wise (EUR)'),
+        ('wise-clp', 'Wise (CLP)'),
+        ('mercado-pago-ar', 'Mercado Pago (AR)'),
     ]
     
     PAYMENT_STATUS_CHOICES = [
