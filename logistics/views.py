@@ -95,8 +95,6 @@ class TourPassengerView(APIView):
                 'checked_in_at': booking_tour.checked_in_at.isoformat() if booking_tour.checked_in_at else None,
                 'checked_in_by': booking_tour.checked_in_by.id if booking_tour.checked_in_by else None,
                 'created_by': booking_tour.created_by.id if booking_tour.created_by else None,
-                'created_at': booking_tour.created_at.isoformat(),
-                'updated_at': booking_tour.updated_at.isoformat(),
             }
             booking_tours.append(booking_tour_data)
 
