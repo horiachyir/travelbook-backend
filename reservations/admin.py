@@ -68,9 +68,9 @@ class BookingPaymentAdmin(admin.ModelAdmin):
 class LogisticsSettingAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'tour', 'date', 'main_driver', 'main_guide',
-        'vehicle', 'operator', 'status', 'created_at'
+        'vehicle', 'status', 'created_at'
     ]
-    list_filter = ['operator', 'status', 'date', 'created_at']
+    list_filter = ['status', 'date', 'created_at']
     search_fields = ['tour__name', 'main_driver__full_name', 'main_guide__full_name']
     readonly_fields = ['created_at', 'updated_at']
 

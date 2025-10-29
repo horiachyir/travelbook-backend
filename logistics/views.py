@@ -157,7 +157,6 @@ class PassengerDataView(APIView):
                     main_guide_id=tour_assignment.get('main_guide'),
                     assistant_guide_id=tour_assignment.get('assistant_guide'),
                     vehicle_id=tour_assignment.get('vehicle_id'),
-                    operator=tour_assignment.get('operator', 'own-operation'),
                     status=tour_assignment.get('status', 'planning')
                 )
 

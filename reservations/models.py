@@ -194,11 +194,6 @@ class LogisticsSetting(models.Model):
     """
     Logistics settings for tour operations including driver, guide, and vehicle assignments
     """
-    OPERATOR_CHOICES = [
-        ('own-operation', 'Own Operation'),
-        ('others', 'Others'),
-    ]
-
     STATUS_CHOICES = [
         ('planning', 'Planning'),
         ('assigned', 'Assigned'),
@@ -221,8 +216,7 @@ class LogisticsSetting(models.Model):
     # Vehicle assignment
     vehicle = models.ForeignKey('settings_app.Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='logistics_settings')
 
-    # Operator and status
-    operator = models.CharField(max_length=50, choices=OPERATOR_CHOICES, default='own-operation')
+    # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planning')
 
     created_at = models.DateTimeField(auto_now_add=True)
