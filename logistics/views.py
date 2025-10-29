@@ -3,10 +3,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
+from django.db import transaction
 from tours.models import Tour
 from settings_app.models import Vehicle
 from users.models import User
-from reservations.models import BookingTour, Booking
+from reservations.models import BookingTour, Booking, Passenger
 
 
 class BasicDataView(APIView):
@@ -107,7 +108,7 @@ class TourPassengerView(APIView):
 class PassengerDataView(APIView):
     """
     POST /api/logistics/passengers/
-    Saves passenger data and tour assignment information
+    Saves passenger data and tour assignment information to passengers table
     """
     permission_classes = [IsAuthenticated]
 
@@ -117,16 +118,47 @@ class PassengerDataView(APIView):
 
             # Extract tour assignment data
             tour_assignment = data.get('tour_assignment', {})
-            passengers = data.get('passengers', [])
+            passengers_data = data.get('passengers', [])
 
-            # TODO: Save passenger data to database
-            # For now, just return success with the received data
+            tour_id = tour_assignment.get('tour_id')
+
+            if not tour_id:
+                return Response({
+                    'success': False,
+                    'message': 'Tour ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            with transaction.atomic():
+                # Get all booking_tours for this tour
+                booking_tours = BookingTour.objects.filter(tour_id=tour_id)
+
+                saved_passengers = []
+
+                # Process each passenger
+                for passenger_data in passengers_data:
+                    booking_tour_id = passenger_data.get('booking_tour_id')
+
+                    if not booking_tour_id:
+                        continue
+
+                    # Get or create passenger record
+                    passenger, created = Passenger.objects.update_or_create(
+                        booking_tour_id=booking_tour_id,
+                        pax_number=passenger_data.get('pax_number'),
+                        defaults={
+                            'name': passenger_data.get('name', ''),
+                            'telephone': passenger_data.get('telephone', ''),
+                            'age': passenger_data.get('age') or None,
+                            'gender': passenger_data.get('gender', '-'),
+                            'nationality': passenger_data.get('nationality', 'Not Informed')
+                        }
+                    )
+                    saved_passengers.append(passenger.id)
 
             return Response({
                 'success': True,
                 'message': 'Passenger data saved successfully',
-                'tour_assignment': tour_assignment,
-                'passengers_count': len(passengers)
+                'passengers_saved': len(saved_passengers)
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:

@@ -259,3 +259,37 @@ class Reservation(models.Model):
     
     def __str__(self):
         return f"{self.reservation_number} - {self.customer.name}"
+
+
+class Passenger(models.Model):
+    """
+    Individual passenger information for a booking tour
+    """
+    GENDER_CHOICES = [
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+        ('-', 'Not Specified'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking_tour = models.ForeignKey(BookingTour, on_delete=models.CASCADE, related_name='passengers')
+
+    # Passenger details
+    pax_number = models.IntegerField()  # PAX 1, PAX 2, etc.
+    name = models.CharField(max_length=255, blank=True)
+    telephone = models.CharField(max_length=50, blank=True)
+    age = models.IntegerField(null=True, blank=True)
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, default='-')
+    nationality = models.CharField(max_length=100, blank=True, default='Not Informed')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'passengers'
+        ordering = ['booking_tour', 'pax_number']
+        unique_together = ['booking_tour', 'pax_number']
+
+    def __str__(self):
+        return f"PAX {self.pax_number} - {self.name or 'Unnamed'}"
