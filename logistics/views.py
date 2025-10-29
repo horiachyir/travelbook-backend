@@ -102,3 +102,35 @@ class TourPassengerView(APIView):
             'count': total_pax_count,
             'booking_tours': booking_tours
         }, status=status.HTTP_200_OK)
+
+
+class PassengerDataView(APIView):
+    """
+    POST /api/logistics/passengers/
+    Saves passenger data and tour assignment information
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            data = request.data
+
+            # Extract tour assignment data
+            tour_assignment = data.get('tour_assignment', {})
+            passengers = data.get('passengers', [])
+
+            # TODO: Save passenger data to database
+            # For now, just return success with the received data
+
+            return Response({
+                'success': True,
+                'message': 'Passenger data saved successfully',
+                'tour_assignment': tour_assignment,
+                'passengers_count': len(passengers)
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)

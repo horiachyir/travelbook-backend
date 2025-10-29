@@ -1,7 +1,8 @@
 from django.urls import path
-from .views import BasicDataView, TourPassengerView
+from .views import BasicDataView, TourPassengerView, PassengerDataView
 
 urlpatterns = [
     path('basic/', BasicDataView.as_view(), name='logistics-basic'),
     path('tours/passenger/', TourPassengerView.as_view(), name='logistics-tour-passenger'),
+    path('passengers/', PassengerDataView.as_view(), name='logistics-passengers'),
 ]
