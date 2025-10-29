@@ -4,10 +4,14 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 from django.db import transaction
+from django.conf import settings
 from tours.models import Tour
 from settings_app.models import Vehicle
 from users.models import User
 from reservations.models import BookingTour, Booking, Passenger
+import json
+import os
+from datetime import datetime
 
 
 class BasicDataView(APIView):
@@ -128,6 +132,38 @@ class PassengerDataView(APIView):
                     'message': 'Tour ID is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            # Save data as JSON file
+            try:
+                # Create logistics_data directory if it doesn't exist
+                json_dir = os.path.join(settings.BASE_DIR, 'logistics_data')
+                os.makedirs(json_dir, exist_ok=True)
+
+                # Generate filename with timestamp
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                tour_name = tour_assignment.get('tour_name', 'unknown_tour').replace(' ', '_')
+                filename = f'passenger_data_{tour_name}_{timestamp}.json'
+                filepath = os.path.join(json_dir, filename)
+
+                # Prepare data to save
+                json_data = {
+                    'timestamp': datetime.now().isoformat(),
+                    'tour_assignment': tour_assignment,
+                    'passengers': passengers_data,
+                    'metadata': {
+                        'tour_id': tour_id,
+                        'total_passengers': len(passengers_data),
+                        'submitted_by': request.user.email if request.user.is_authenticated else 'anonymous'
+                    }
+                }
+
+                # Write JSON file
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(json_data, f, indent=2, ensure_ascii=False)
+
+            except Exception as json_error:
+                # Log error but continue with database save
+                print(f"Error saving JSON file: {str(json_error)}")
+
             with transaction.atomic():
                 # Get all booking_tours for this tour
                 booking_tours = BookingTour.objects.filter(tour_id=tour_id)
@@ -158,7 +194,8 @@ class PassengerDataView(APIView):
             return Response({
                 'success': True,
                 'message': 'Passenger data saved successfully',
-                'passengers_saved': len(saved_passengers)
+                'passengers_saved': len(saved_passengers),
+                'json_file': filename if 'filename' in locals() else None
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
