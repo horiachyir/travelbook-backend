@@ -8,7 +8,7 @@ from django.conf import settings
 from tours.models import Tour
 from settings_app.models import Vehicle
 from users.models import User
-from reservations.models import BookingTour, Booking, Passenger
+from reservations.models import BookingTour, Booking, Passenger, LogisticsSetting
 import json
 import os
 from datetime import datetime
@@ -165,8 +165,36 @@ class PassengerDataView(APIView):
                 print(f"Error saving JSON file: {str(json_error)}")
 
             with transaction.atomic():
-                # Get all booking_tours for this tour
-                booking_tours = BookingTour.objects.filter(tour_id=tour_id)
+                # Parse date and time
+                date_str = tour_assignment.get('date')
+                departure_time_str = tour_assignment.get('departure_time')
+
+                # Convert date string to datetime
+                if isinstance(date_str, str):
+                    date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                else:
+                    date_obj = date_str
+
+                # Convert departure_time to time object
+                departure_time_obj = None
+                if departure_time_str:
+                    from datetime import time
+                    if isinstance(departure_time_str, str):
+                        time_parts = departure_time_str.split(':')
+                        departure_time_obj = time(int(time_parts[0]), int(time_parts[1]), int(time_parts[2]) if len(time_parts) > 2 else 0)
+
+                # Create or update LogisticsSetting record
+                logistics_setting = LogisticsSetting.objects.create(
+                    tour_id=tour_id,
+                    date=date_obj,
+                    departure_time=departure_time_obj,
+                    main_driver_id=tour_assignment.get('main_driver'),
+                    main_guide_id=tour_assignment.get('main_guide'),
+                    assistant_guide_id=tour_assignment.get('assistant_guide'),
+                    vehicle_id=tour_assignment.get('vehicle_id'),
+                    operator=tour_assignment.get('operator', 'own-operation'),
+                    status=tour_assignment.get('status', 'planning')
+                )
 
                 saved_passengers = []
 
@@ -177,19 +205,17 @@ class PassengerDataView(APIView):
                     if not booking_tour_id:
                         continue
 
-                    # Get or create passenger record
-                    passenger, created = Passenger.objects.update_or_create(
+                    # Create passenger record with logistics_setting reference
+                    passenger = Passenger.objects.create(
+                        logistics_setting=logistics_setting,
                         booking_tour_id=booking_tour_id,
-                        pax_number=passenger_data.get('pax_number'),
-                        defaults={
-                            'name': passenger_data.get('name', ''),
-                            'telephone': passenger_data.get('telephone', ''),
-                            'age': passenger_data.get('age') or None,
-                            'gender': passenger_data.get('gender', '-'),
-                            'nationality': passenger_data.get('nationality', 'Not Informed')
-                        }
+                        name=passenger_data.get('name', ''),
+                        telephone=passenger_data.get('telephone', ''),
+                        age=passenger_data.get('age') or None,
+                        gender=passenger_data.get('gender', '-'),
+                        nationality=passenger_data.get('nationality', 'Not Informed')
                     )
-                    saved_passengers.append(passenger.id)
+                    saved_passengers.append(str(passenger.id))
 
             return Response({
                 'success': True,

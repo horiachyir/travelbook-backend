@@ -190,6 +190,53 @@ class BookingPayment(models.Model):
         return f"Payment for {self.booking.id} - {self.status}"
 
 
+class LogisticsSetting(models.Model):
+    """
+    Logistics settings for tour operations including driver, guide, and vehicle assignments
+    """
+    OPERATOR_CHOICES = [
+        ('own-operation', 'Own Operation'),
+        ('others', 'Others'),
+    ]
+
+    STATUS_CHOICES = [
+        ('planning', 'Planning'),
+        ('assigned', 'Assigned'),
+        ('in-progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Tour assignment details
+    tour = models.ForeignKey('tours.Tour', on_delete=models.PROTECT, related_name='logistics_settings')
+    date = models.DateTimeField()
+    departure_time = models.TimeField(null=True, blank=True)
+
+    # Staff assignments (foreign keys to User model)
+    main_driver = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_as_main_driver')
+    main_guide = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_as_main_guide')
+    assistant_guide = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_as_assistant_guide')
+
+    # Vehicle assignment
+    vehicle = models.ForeignKey('settings_app.Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='logistics_settings')
+
+    # Operator and status
+    operator = models.CharField(max_length=50, choices=OPERATOR_CHOICES, default='own-operation')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planning')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'logistics_settings'
+        ordering = ['-date']
+
+    def __str__(self):
+        tour_name = self.tour.name if self.tour else 'Unknown Tour'
+        return f"{tour_name} - {self.date.strftime('%Y-%m-%d')}"
+
+
 class Passenger(models.Model):
     """
     Individual passenger information for a booking tour
@@ -202,10 +249,10 @@ class Passenger(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    logistics_setting = models.ForeignKey(LogisticsSetting, on_delete=models.CASCADE, related_name='passengers', null=True, blank=True)
     booking_tour = models.ForeignKey(BookingTour, on_delete=models.CASCADE, related_name='passengers')
 
     # Passenger details
-    pax_number = models.IntegerField()  # PAX 1, PAX 2, etc.
     name = models.CharField(max_length=255, blank=True)
     telephone = models.CharField(max_length=50, blank=True)
     age = models.IntegerField(null=True, blank=True)
@@ -217,8 +264,7 @@ class Passenger(models.Model):
 
     class Meta:
         db_table = 'passengers'
-        ordering = ['booking_tour', 'pax_number']
-        unique_together = ['booking_tour', 'pax_number']
+        ordering = ['logistics_setting', 'booking_tour']
 
     def __str__(self):
-        return f"PAX {self.pax_number} - {self.name or 'Unnamed'}"
+        return f"{self.name or 'Unnamed'} - {self.booking_tour}"
