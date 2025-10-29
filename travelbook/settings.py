@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'reports',
     'settings_app',
     'support',
+    'financial',
 ]
 
 MIDDLEWARE = [

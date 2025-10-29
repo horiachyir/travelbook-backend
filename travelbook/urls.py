@@ -53,6 +53,7 @@ urlpatterns = [
     path('api/settings/vehicle/<uuid:pk>', VehicleDetailView.as_view(), name='vehicle-detail-no-slash'),
     path('api/settings/', include('settings_app.urls')),
     path('api/support/', include('support.urls')),
+    path('api/financial/', include('financial.urls')),
 ]
 
 if settings.DEBUG:

@@ -1,0 +1,52 @@
+{
+  "config": {
+    "sales_person": "59482a8a-b14b-4697-a655-7c5e1eb588da",
+    "leadSource": "youtube",
+    "currency": "BRL"
+  },
+  "status": "pending",
+  "validUntil": "2025-11-28T13:37:05.205Z",
+  "quotationComments": "",
+  "sendQuotationAccess": true,
+  "shareableLink": "1761745097330-9iplw7eqmfo",
+  "customer": {
+    "name": "ZuoXiaoQing",
+    "email": "zuoxiagqing@gmail.com",
+    "phone": "5678354644",
+    "language": "en",
+    "country": "China",
+    "idNumber": "342-3466-233-C",
+    "cpf": "444",
+    "address": "Beijing-48",
+    "hotel": "hotel1",
+    "room": "123",
+    "additionalNotes": ""
+  },
+  "tours": [
+    {
+      "tourId": "8f91ccdf-6b54-4468-a1c8-52714aec202f",
+      "destination": "ff8b80ee-ecfc-48dd-bffd-e5a0ab3ec665",
+      "date": "2025-10-29T22:00:00.000Z",
+      "pickupAddress": "aaa",
+      "pickupTime": "08:30:00",
+      "adultPax": 3,
+      "adultPrice": 180,
+      "childPax": 1,
+      "childPrice": 180,
+      "infantPax": 0,
+      "infantPrice": 0,
+      "subtotal": 720,
+      "operator": "own-operation",
+      "comments": ""
+    }
+  ],
+  "paymentDetails": {
+    "date": "2025-10-29T13:37:05.205Z",
+    "method": "",
+    "percentage": 50,
+    "amountPaid": 0,
+    "comments": "",
+    "status": "pending",
+    "receiptFile": null
+  }
+}
