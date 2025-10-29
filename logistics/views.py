@@ -53,91 +53,54 @@ class BasicDataView(APIView):
 class TourPassengerView(APIView):
     """
     GET /api/logistics/tours/passenger/
-    Returns passenger data from booking_tours table with related booking and customer information
-    Query parameters:
-        - tour_id: Filter by specific tour
-        - date: Filter by specific date (YYYY-MM-DD format)
-        - operator: Filter by operator (own-operation, third-party)
+    Returns all data from booking_tours table
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Get query parameters
-        tour_id = request.query_params.get('tour_id')
-        date_filter = request.query_params.get('date')
-        operator = request.query_params.get('operator')
+        # Get all booking tours
+        queryset = BookingTour.objects.all()
 
-        # Base queryset
-        queryset = BookingTour.objects.select_related(
-            'booking',
-            'booking__customer',
-            'tour',
-            'destination'
-        ).exclude(tour_status__in=['cancelled', 'no-show'])
+        # Build booking_tours list with all fields
+        booking_tours = []
+        total_pax_count = 0
 
-        # Apply filters
-        if tour_id:
-            queryset = queryset.filter(tour_id=tour_id)
+        for booking_tour in queryset:
+            # Calculate total pax for this booking tour
+            total_pax_count += booking_tour.adult_pax + booking_tour.child_pax
 
-        if date_filter:
-            queryset = queryset.filter(date__date=date_filter)
-
-        if operator:
-            queryset = queryset.filter(operator=operator)
-
-        # Build passenger list
-        passengers = []
-        for idx, booking_tour in enumerate(queryset, start=1):
-            customer = booking_tour.booking.customer
-
-            # Create passenger entries based on pax numbers
-            total_pax = booking_tour.adult_pax + booking_tour.child_pax + booking_tour.infant_pax
-
-            for pax_num in range(1, total_pax + 1):
-                # Determine passenger type
-                if pax_num <= booking_tour.adult_pax:
-                    pax_type = 'Adult'
-                elif pax_num <= booking_tour.adult_pax + booking_tour.child_pax:
-                    pax_type = 'Child'
-                else:
-                    pax_type = 'Infant'
-
-                passenger_data = {
-                    'id': f"{booking_tour.id}_{pax_num}",
-                    'booking_tour_id': str(booking_tour.id),
-                    'booking_id': str(booking_tour.booking.id),
-                    'pax_number': pax_num,
-                    'sequence': idx,
-
-                    # Customer information
-                    'rut_id_passport': customer.id_number or customer.cpf or '',
-                    'name': customer.name,
-                    'telephone': customer.phone,
-                    'age': '',  # Not available in current schema
-                    'gender': '',  # Not available in current schema
-                    'nationality': customer.country,
-                    'observations': booking_tour.comments,
-
-                    # Tour information
-                    'tour_name': booking_tour.tour.name,
-                    'tour_date': booking_tour.date.strftime('%Y-%m-%d'),
-                    'tour_time': booking_tour.pickup_time or booking_tour.tour.departure_time,
-                    'pickup_address': booking_tour.pickup_address,
-                    'hotel': customer.hotel,
-                    'room': customer.room,
-
-                    # Booking details
-                    'tour_status': booking_tour.tour_status,
-                    'operator': booking_tour.operator,
-                    'pax_type': pax_type,
-
-                    # Pricing
-                    'subtotal': float(booking_tour.subtotal),
-                    'currency': booking_tour.booking.currency,
-                }
-                passengers.append(passenger_data)
+            booking_tour_data = {
+                'id': str(booking_tour.id),
+                'booking_id': str(booking_tour.booking.id),
+                'tour_id': str(booking_tour.tour.id) if booking_tour.tour else None,
+                'destination_id': str(booking_tour.destination.id) if booking_tour.destination else None,
+                'date': booking_tour.date.isoformat(),
+                'pickup_address': booking_tour.pickup_address,
+                'pickup_time': booking_tour.pickup_time,
+                'adult_pax': booking_tour.adult_pax,
+                'adult_price': float(booking_tour.adult_price),
+                'child_pax': booking_tour.child_pax,
+                'child_price': float(booking_tour.child_price),
+                'infant_pax': booking_tour.infant_pax,
+                'infant_price': float(booking_tour.infant_price),
+                'subtotal': float(booking_tour.subtotal),
+                'operator': booking_tour.operator,
+                'comments': booking_tour.comments,
+                'tour_status': booking_tour.tour_status,
+                'cancellation_reason': booking_tour.cancellation_reason,
+                'cancellation_fee': float(booking_tour.cancellation_fee) if booking_tour.cancellation_fee else 0,
+                'cancellation_observation': booking_tour.cancellation_observation,
+                'cancelled_at': booking_tour.cancelled_at.isoformat() if booking_tour.cancelled_at else None,
+                'cancelled_by': booking_tour.cancelled_by.id if booking_tour.cancelled_by else None,
+                'checked_in_at': booking_tour.checked_in_at.isoformat() if booking_tour.checked_in_at else None,
+                'checked_in_by': booking_tour.checked_in_by.id if booking_tour.checked_in_by else None,
+                'created_by': booking_tour.created_by.id if booking_tour.created_by else None,
+                'created_at': booking_tour.created_at.isoformat(),
+                'updated_at': booking_tour.updated_at.isoformat(),
+            }
+            booking_tours.append(booking_tour_data)
 
         return Response({
-            'count': len(passengers),
-            'passengers': passengers
+            'count': total_pax_count,
+            'booking_tours': booking_tours
         }, status=status.HTTP_200_OK)
