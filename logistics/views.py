@@ -192,3 +192,67 @@ class PassengerDataView(APIView):
                 'success': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PassengerListView(APIView):
+    """
+    GET /api/logistics/passenger/list/
+    Returns all stored logistics settings with their associated passengers
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Get all logistics settings with related data
+            logistics_settings = LogisticsSetting.objects.select_related(
+                'tour', 'main_driver', 'main_guide', 'assistant_guide', 'vehicle'
+            ).prefetch_related('passengers__booking_tour').all()
+
+            result = []
+
+            for setting in logistics_settings:
+                # Build logistics setting data
+                setting_data = {
+                    'id': str(setting.id),
+                    'tour_id': str(setting.tour.id) if setting.tour else None,
+                    'tour_name': setting.tour.name if setting.tour else None,
+                    'date': setting.date.isoformat(),
+                    'departure_time': setting.departure_time.strftime('%H:%M:%S') if setting.departure_time else None,
+                    'main_driver_id': str(setting.main_driver.id) if setting.main_driver else None,
+                    'main_driver_name': setting.main_driver.full_name if setting.main_driver else None,
+                    'main_guide_id': str(setting.main_guide.id) if setting.main_guide else None,
+                    'main_guide_name': setting.main_guide.full_name if setting.main_guide else None,
+                    'assistant_guide_id': str(setting.assistant_guide.id) if setting.assistant_guide else None,
+                    'assistant_guide_name': setting.assistant_guide.full_name if setting.assistant_guide else None,
+                    'vehicle_id': str(setting.vehicle.id) if setting.vehicle else None,
+                    'vehicle_name': setting.vehicle.vehicle_name if setting.vehicle else None,
+                    'status': setting.status,
+                    'created_at': setting.created_at.isoformat(),
+                    'passengers': []
+                }
+
+                # Add passengers for this logistics setting
+                for passenger in setting.passengers.all():
+                    passenger_data = {
+                        'id': str(passenger.id),
+                        'booking_tour_id': str(passenger.booking_tour.id) if passenger.booking_tour else None,
+                        'name': passenger.name,
+                        'telephone': passenger.telephone,
+                        'age': passenger.age,
+                        'gender': passenger.gender,
+                        'nationality': passenger.nationality
+                    }
+                    setting_data['passengers'].append(passenger_data)
+
+                result.append(setting_data)
+
+            return Response({
+                'count': len(result),
+                'logistics_settings': result
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)

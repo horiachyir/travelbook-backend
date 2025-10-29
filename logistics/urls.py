@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import BasicDataView, TourPassengerView, PassengerDataView
+from .views import BasicDataView, TourPassengerView, PassengerDataView, PassengerListView
 
 urlpatterns = [
     path('basic/', BasicDataView.as_view(), name='logistics-basic'),
     path('tours/passenger/', TourPassengerView.as_view(), name='logistics-tour-passenger'),
     path('passengers/', PassengerDataView.as_view(), name='logistics-passengers'),
+    path('passenger/list/', PassengerListView.as_view(), name='logistics-passenger-list'),
 ]
