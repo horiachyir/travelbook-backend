@@ -53,7 +53,6 @@ class Booking(models.Model):
     send_quotation_access = models.BooleanField(default=True)
     shareable_link = models.CharField(max_length=500, blank=True, null=True, unique=True)
 
-    # Timestamps and user tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_bookings')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
