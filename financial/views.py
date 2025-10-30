@@ -347,12 +347,20 @@ def financial_dashboard(request):
 @permission_classes([IsAuthenticated])
 def receivables_list(request):
     """
-    Get all receivables (pending and partial payments)
+    Get all receivables (invoices/payments) from booking_payments table
+    Returns data structured for the frontend Receivables tab
+
+    Retrieves data from:
+    - booking_payments (payment records)
+    - bookings (booking details and currency)
+    - customers (customer information)
+    - booking_tours (tour details)
     """
-    # Get payments with pending or partial status
-    receivables = BookingPayment.objects.filter(
-        status__in=['pending', 'partial']
-    ).select_related('booking', 'booking__customer')
+    # Get all payments (not just pending/partial - show full payment history)
+    receivables = BookingPayment.objects.all().select_related(
+        'booking',
+        'booking__customer'
+    ).prefetch_related('booking__tours')
 
     # Filter by date range if provided
     start_date = request.query_params.get('startDate')
@@ -361,20 +369,30 @@ def receivables_list(request):
     if start_date and end_date:
         receivables = receivables.filter(date__range=[start_date, end_date])
 
-    # Build response data
+    # Build response data matching frontend structure
     data = []
     for payment in receivables:
+        # Get booking details
+        booking = payment.booking
+        customer = booking.customer
+
+        # Format due date
+        due_date_str = payment.date.strftime('%Y-%m-%d') if payment.date else ''
+
         data.append({
             'id': payment.id,
-            'bookingId': str(payment.booking.id),
-            'customerName': payment.booking.customer.name if payment.booking.customer else 'N/A',
+            'bookingId': str(booking.id),
+            'customerName': customer.name if customer else 'N/A',
             'amount': float(payment.amount_paid),
-            'currency': payment.booking.currency,
-            'dueDate': payment.date,
+            'currency': booking.currency,
+            'dueDate': due_date_str,
             'status': payment.status,
             'method': payment.method,
-            'percentage': payment.percentage
+            'percentage': float(payment.percentage)
         })
+
+    # Sort by date (newest first)
+    data.sort(key=lambda x: x['dueDate'], reverse=True)
 
     return Response(data)
 
