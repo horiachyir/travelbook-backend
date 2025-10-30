@@ -360,13 +360,18 @@ def receivables_list(request):
     receivables = BookingPayment.objects.all().select_related(
         'booking',
         'booking__customer'
-    ).prefetch_related('booking__tours')
+    ).prefetch_related('booking__booking_tours')
 
     # Filter by date range if provided
-    start_date = request.query_params.get('startDate')
-    end_date = request.query_params.get('endDate')
+    start_date_str = request.query_params.get('startDate')
+    end_date_str = request.query_params.get('endDate')
 
-    if start_date and end_date:
+    if start_date_str and end_date_str:
+        # Convert string dates to timezone-aware datetime objects
+        start_date = timezone.make_aware(datetime.strptime(start_date_str, '%Y-%m-%d'))
+        end_date = timezone.make_aware(
+            datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        )
         receivables = receivables.filter(date__range=[start_date, end_date])
 
     # Build response data matching frontend structure
