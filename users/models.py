@@ -38,7 +38,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_verified = models.BooleanField(default=False)
     
-    # Timestamps
     date_joined = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
