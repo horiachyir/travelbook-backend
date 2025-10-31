@@ -209,17 +209,17 @@ def generate_service_orders(request):
 
     Body:
     {
-        "reservationIds": ["uuid1", "uuid2", ...]
+        "reservation_ids": ["uuid1", "uuid2", ...]
     }
 
     Returns:
     {
-        "pdfUrl": "string",  // or Base64 encoded PDF
+        "pdf_url": "string",  // or Base64 encoded PDF
         "generated": 5
     }
     """
     try:
-        reservation_ids = request.data.get('reservationIds', [])
+        reservation_ids = request.data.get('reservation_ids', request.data.get('reservationIds', []))
 
         if not reservation_ids:
             return Response({'error': 'No reservation IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
@@ -237,7 +237,7 @@ def generate_service_orders(request):
 
         return Response({
             'message': f'Service orders generated for {len(bookings)} reservations',
-            'pdfUrl': '/media/service-orders/generated.pdf',  # Placeholder
+            'pdf_url': '/media/service-orders/generated.pdf',  # Placeholder
             'generated': len(bookings)
         })
 
@@ -256,7 +256,7 @@ def send_confirmation_emails(request):
 
     Body:
     {
-        "reservationIds": ["uuid1", "uuid2", ...]
+        "reservation_ids": ["uuid1", "uuid2", ...]
     }
 
     Returns:
@@ -266,7 +266,7 @@ def send_confirmation_emails(request):
     }
     """
     try:
-        reservation_ids = request.data.get('reservationIds', [])
+        reservation_ids = request.data.get('reservation_ids', request.data.get('reservationIds', []))
 
         if not reservation_ids:
             return Response({'error': 'No reservation IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
