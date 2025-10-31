@@ -30,8 +30,8 @@ class DestinationListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only destinations created by the current user
-        return Destination.objects.filter(created_by=self.request.user).select_related('created_by')
+        # Return ALL destinations, regardless of who created them
+        return Destination.objects.all().select_related('created_by')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -47,8 +47,9 @@ class DestinationDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only destinations created by the current user
-        return Destination.objects.filter(created_by=self.request.user).select_related('created_by')
+        # Return ALL destinations for viewing
+        # Permission checks for edit/delete can be added if needed
+        return Destination.objects.all().select_related('created_by')
 
     def get_serializer_class(self):
         """Use different serializers for different operations"""
