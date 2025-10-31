@@ -40,7 +40,13 @@ def serialize_booking_tour(booking_tour):
         'infantPrice': float(booking_tour.infant_price),
         'subtotal': tour_subtotal,
         'operator': booking_tour.operator,
+        'operatorName': booking_tour.operator_name,
         'comments': booking_tour.comments,
+        # Logistics assignments
+        'mainDriverId': str(booking_tour.main_driver.id) if booking_tour.main_driver else None,
+        'mainDriverName': booking_tour.main_driver.full_name if booking_tour.main_driver else None,
+        'mainGuideId': str(booking_tour.main_guide.id) if booking_tour.main_guide else None,
+        'mainGuideName': booking_tour.main_guide.full_name if booking_tour.main_guide else None,
         # New tour status and cancellation fields
         'tour_status': booking_tour.tour_status,
         'cancellation_reason': booking_tour.cancellation_reason,
@@ -997,6 +1003,8 @@ def get_confirmed_reservations(request):
             'booking_tours__tour',           # Join tours table via tour_id in booking_tours
             'booking_tours__destination',    # Join destinations table via destination_id in booking_tours
             'booking_tours__created_by',     # Join users table for tour creator
+            'booking_tours__main_driver',    # Join users table for main driver
+            'booking_tours__main_guide',     # Join users table for main guide
             'payment_details__created_by'    # Join users table for payment creator
         ).filter(status='confirmed').order_by('-created_at')
 

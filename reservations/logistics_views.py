@@ -30,8 +30,8 @@ def update_reservation_logistics(request, booking_id):
     Body:
     {
         "operator": "string",
-        "driver": "string (user full name)",
-        "guide": "string (user full name)",
+        "driver": "uuid (user ID)",
+        "guide": "uuid (user ID)",
         "tour": {
             "pickupTime": "09:00",
             "pickupAddress": "Hotel XYZ",
@@ -65,17 +65,17 @@ def update_reservation_logistics(request, booking_id):
             # Update driver
             if 'driver' in data:
                 try:
-                    driver = User.objects.get(full_name=data['driver'], role='driver')
+                    driver = User.objects.get(id=data['driver'], role='driver')
                     booking_tour.main_driver = driver
-                except User.DoesNotExist:
+                except (User.DoesNotExist, ValueError):
                     logger.warning(f"Driver not found: {data['driver']}")
 
             # Update guide
             if 'guide' in data:
                 try:
-                    guide = User.objects.get(full_name=data['guide'], role__in=['guide', 'main_guide'])
+                    guide = User.objects.get(id=data['guide'], role__in=['guide', 'main_guide'])
                     booking_tour.main_guide = guide
-                except User.DoesNotExist:
+                except (User.DoesNotExist, ValueError):
                     logger.warning(f"Guide not found: {data['guide']}")
 
             # Update tour details
