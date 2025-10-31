@@ -1,5 +1,5 @@
 from django.urls import path, re_path
-from . import views
+from . import views, logistics_views
 
 urlpatterns = [
     # Confirmed reservations endpoint
@@ -45,4 +45,16 @@ urlpatterns = [
     path('booking-tour/<uuid:tour_id>/noshow/', views.noshow_booking_tour, name='noshow_booking_tour'),
     path('booking-tour/<uuid:tour_id>/update/', views.update_booking_tour, name='update_booking_tour'),
     path('booking/<uuid:booking_id>/add-tour/', views.add_tour_to_booking, name='add_tour_to_booking'),
+
+    # New Logistics/Operations endpoints
+    path('<uuid:booking_id>/', logistics_views.update_reservation_logistics, name='update_reservation_logistics'),
+    re_path(r'^(?P<booking_id>[0-9a-f-]{36})/?$', logistics_views.update_reservation_logistics, name='update_reservation_logistics_flexible'),
+    path('<uuid:booking_id>/status/', logistics_views.update_reservation_status, name='update_reservation_status'),
+    re_path(r'^(?P<booking_id>[0-9a-f-]{36})/status/?$', logistics_views.update_reservation_status, name='update_reservation_status_flexible'),
+    path('filter-options/', logistics_views.get_filter_options, name='get_filter_options'),
+    re_path(r'^filter-options/?$', logistics_views.get_filter_options, name='get_filter_options_flexible'),
+    path('service-orders/', logistics_views.generate_service_orders, name='generate_service_orders'),
+    re_path(r'^service-orders/?$', logistics_views.generate_service_orders, name='generate_service_orders_flexible'),
+    path('send-confirmations/', logistics_views.send_confirmation_emails, name='send_confirmation_emails'),
+    re_path(r'^send-confirmations/?$', logistics_views.send_confirmation_emails, name='send_confirmation_emails_flexible'),
 ]

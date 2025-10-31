@@ -16,6 +16,8 @@ class Booking(models.Model):
         ('pending', 'Pending'),
         ('cancelled', 'Cancelled'),
         ('completed', 'Completed'),
+        ('reconfirmed', 'Reconfirmed'),  # New status for logistics confirmation
+        ('no-show', 'No Show'),  # New status for no-show
     ]
 
     LEAD_SOURCE_CHOICES = [
@@ -53,6 +55,11 @@ class Booking(models.Model):
     send_quotation_access = models.BooleanField(default=True)
     shareable_link = models.CharField(max_length=500, blank=True, null=True, unique=True)
 
+    # Logistics locking - prevents sales staff from editing after reconfirmation
+    is_locked = models.BooleanField(default=False)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='locked_bookings')
+
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_bookings')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -63,6 +70,34 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"Booking {self.id} - {self.customer.name if self.customer else 'No Customer'}"
+
+    def save(self, *args, **kwargs):
+        """Auto-lock when status changes to reconfirmed, completed, cancelled, or no-show"""
+        if self.status in ['reconfirmed', 'completed', 'cancelled', 'no-show']:
+            if not self.is_locked:
+                self.is_locked = True
+                if not self.locked_at:
+                    self.locked_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    def can_edit_by_sales(self):
+        """Check if sales staff can edit this booking"""
+        return self.status in ['pending', 'confirmed'] and not self.is_locked
+
+    def can_edit_by_logistics(self):
+        """Check if logistics staff can edit this booking"""
+        return self.status != 'completed'
+
+    def can_reconfirm(self):
+        """Check if booking can be reconfirmed (has all required logistics info)"""
+        if self.status != 'confirmed':
+            return False
+
+        # Check if at least one booking tour has all required logistics info
+        for tour in self.booking_tours.all():
+            if tour.main_driver and tour.main_guide and tour.operator:
+                return True
+        return False
 
 
 class BookingTour(models.Model):
@@ -127,6 +162,13 @@ class BookingTour(models.Model):
     # Check-in tracking
     checked_in_at = models.DateTimeField(null=True, blank=True)
     checked_in_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='checkedin_booking_tours')
+
+    # Logistics assignments - for operations management
+    main_driver = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tours_as_main_driver')
+    main_guide = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tours_as_main_guide')
+    assistant_guide = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tours_as_assistant_guide')
+    vehicle = models.ForeignKey('settings_app.Vehicle', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_tours')
+    operator_name = models.CharField(max_length=255, blank=True, help_text='Name of operator/supplier if third-party')
 
     # User tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_tours')
