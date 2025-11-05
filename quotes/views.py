@@ -109,11 +109,26 @@ def accept_quote_terms(request, link):
                 'message': 'Terms have already been accepted for this quote'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update accept_term field
+        # Update accept_term fields
         booking.accept_term = True
+        booking.accept_term_date = timezone.now()
+
+        # Get IP address from request
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        booking.accept_term_ip = ip_address
+
+        # Get email and name
+        customer_email = request.data.get('email')
+        customer_name = request.data.get('name', booking.customer.name if booking.customer else '')
+
+        booking.accept_term_email = customer_email or (booking.customer.email if booking.customer else '')
+        booking.accept_term_name = customer_name
 
         # Optionally update customer email if provided
-        customer_email = request.data.get('email')
         if customer_email and booking.customer:
             booking.customer.email = customer_email
             booking.customer.save()

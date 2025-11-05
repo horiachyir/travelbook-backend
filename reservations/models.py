@@ -56,6 +56,10 @@ class Booking(models.Model):
     send_quotation_access = models.BooleanField(default=True)
     shareable_link = models.CharField(max_length=500, blank=True, null=True, unique=True)
     accept_term = models.BooleanField(default=False)  # Track if customer accepted terms
+    accept_term_email = models.EmailField(blank=True, null=True)  # Email used when accepting terms
+    accept_term_ip = models.GenericIPAddressField(blank=True, null=True)  # IP address when accepting terms
+    accept_term_name = models.CharField(max_length=255, blank=True, null=True)  # Name when accepting terms
+    accept_term_date = models.DateTimeField(blank=True, null=True)  # Date/time when terms were accepted
 
     # Logistics locking - prevents sales staff from editing after reconfirmation
     is_locked = models.BooleanField(default=False)

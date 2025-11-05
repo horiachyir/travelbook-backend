@@ -1087,6 +1087,14 @@ def get_confirmed_reservations(request):
                 'quotationComments': booking.quotation_comments,
                 'sendQuotationAccess': booking.send_quotation_access,
                 'shareableLink': booking.shareable_link,
+                'acceptTerm': booking.accept_term,  # Add accept_term field
+                'acceptTermDetails': {
+                    'email': booking.accept_term_email,
+                    'ip': booking.accept_term_ip,
+                    'name': booking.accept_term_name,
+                    'date': booking.accept_term_date.isoformat() if booking.accept_term_date else None,
+                    'accepted': booking.accept_term
+                } if booking.accept_term else None,
                 'totalAmount': float(total_amount),
                 'customer': customer_data,                    # From customers table
                 'tours': tours_data,                          # From booking_tours, tours, destinations tables
@@ -1212,6 +1220,14 @@ def get_all_reservations_calendar(request):
                 'quotationComments': booking.quotation_comments,
                 'sendQuotationAccess': booking.send_quotation_access,
                 'shareableLink': booking.shareable_link,
+                'acceptTerm': booking.accept_term,  # Add accept_term field
+                'acceptTermDetails': {
+                    'email': booking.accept_term_email,
+                    'ip': booking.accept_term_ip,
+                    'name': booking.accept_term_name,
+                    'date': booking.accept_term_date.isoformat() if booking.accept_term_date else None,
+                    'accepted': booking.accept_term
+                } if booking.accept_term else None,
                 'totalAmount': float(total_amount),
                 'customer': customer_data,                    # From customers table
                 'tours': tours_data,                          # From booking_tours, tours, destinations tables

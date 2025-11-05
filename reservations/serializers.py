@@ -302,6 +302,14 @@ class BookingSerializer(serializers.Serializer):
                 'quotationComments': instance.quotation_comments,
                 'sendQuotationAccess': instance.send_quotation_access,
                 'shareableLink': instance.shareable_link,
+                'acceptTerm': instance.accept_term,
+                'acceptTermDetails': {
+                    'email': instance.accept_term_email,
+                    'ip': instance.accept_term_ip,
+                    'name': instance.accept_term_name,
+                    'date': instance.accept_term_date.isoformat() if instance.accept_term_date else None,
+                    'accepted': instance.accept_term
+                } if instance.accept_term else None,
                 'created_at': instance.created_at,
                 'updated_at': instance.updated_at,
                 'booking_tours': [

@@ -1,0 +1,52 @@
+{
+  "config": {
+    "sales_person": "ba224dc5-bf8e-461a-8dfb-fa37466e469e",
+    "leadSource": "youtube",
+    "currency": "BRL"
+  },
+  "status": "pending",
+  "validUntil": "2025-12-05T15:00:46.837Z",
+  "quotationComments": "",
+  "sendQuotationAccess": true,
+  "shareableLink": "1762355213609-tlgll27w7xb",
+  "customer": {
+    "name": "Liang",
+    "email": "liang@gmail.com",
+    "phone": "5678354644",
+    "language": "en",
+    "country": "Brasil",
+    "idNumber": "342-3466-233-C",
+    "cpf": "543",
+    "address": "SangPaulo 45",
+    "hotel": "hotel1",
+    "room": "322",
+    "additionalNotes": "efe"
+  },
+  "tours": [
+    {
+      "tourId": "aff0a910-1a40-422d-8697-a27825f24606",
+      "destination": "ff8b80ee-ecfc-48dd-bffd-e5a0ab3ec665",
+      "date": "2025-10-31T22:00:00.000Z",
+      "pickupAddress": "fefefe",
+      "pickupTime": "14:00:00",
+      "adultPax": 2,
+      "adultPrice": 1500,
+      "childPax": 1,
+      "childPrice": 1300,
+      "infantPax": 0,
+      "infantPrice": 0,
+      "subtotal": 4300,
+      "operator": "own-operation",
+      "comments": ""
+    }
+  ],
+  "paymentDetails": {
+    "date": "2025-11-05T15:00:46.837Z",
+    "method": "",
+    "percentage": 100,
+    "amountPaid": 0,
+    "comments": "",
+    "status": "pending",
+    "receiptFile": null
+  }
+}
