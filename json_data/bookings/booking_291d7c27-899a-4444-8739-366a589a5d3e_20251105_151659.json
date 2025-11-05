@@ -1,0 +1,52 @@
+{
+  "config": {
+    "sales_person": "ba224dc5-bf8e-461a-8dfb-fa37466e469e",
+    "leadSource": "youtube",
+    "currency": "BRL"
+  },
+  "status": "pending",
+  "validUntil": "2025-12-05T15:00:46.837Z",
+  "quotationComments": "",
+  "sendQuotationAccess": true,
+  "shareableLink": "1762355813637-92sx3reizwb",
+  "customer": {
+    "name": "Macaros",
+    "email": "liang@gmail.com",
+    "phone": "3344643534",
+    "language": "en",
+    "country": "Brasil",
+    "idNumber": "1231232131",
+    "cpf": "454",
+    "address": "Beijing-33",
+    "hotel": "hotel1",
+    "room": "121",
+    "additionalNotes": "sasa"
+  },
+  "tours": [
+    {
+      "tourId": "8f91ccdf-6b54-4468-a1c8-52714aec202f",
+      "destination": "ff8b80ee-ecfc-48dd-bffd-e5a0ab3ec665",
+      "date": "2025-10-31T22:00:00.000Z",
+      "pickupAddress": "asasa",
+      "pickupTime": "08:30:00",
+      "adultPax": 2,
+      "adultPrice": 180,
+      "childPax": 0,
+      "childPrice": 180,
+      "infantPax": 0,
+      "infantPrice": 0,
+      "subtotal": 360,
+      "operator": "own-operation",
+      "comments": ""
+    }
+  ],
+  "paymentDetails": {
+    "date": "2025-11-05T15:00:46.837Z",
+    "method": "cash-ars",
+    "percentage": 100,
+    "amountPaid": 0,
+    "comments": "",
+    "status": "paid",
+    "receiptFile": null
+  }
+}
