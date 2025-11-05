@@ -19,6 +19,7 @@ urlpatterns = [
     # API Endpoints
     path('api/auth/', include('authentication.urls')),
     path('api/users/', include('users.urls')),
+    path('api/user/', include('users.urls')),  # Alias for singular form
     path('api/destinations/', DestinationsWithToursView.as_view(), name='destinations-with-tours'),
     path('api/destinations', DestinationsWithToursView.as_view(), name='destinations-with-tours-no-slash'),
     path('api/quotes/', include('quotes.urls')),

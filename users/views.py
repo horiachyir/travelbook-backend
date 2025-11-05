@@ -113,6 +113,25 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_avatar(request):
+    """Update user avatar with base64 encoded image"""
+    user = request.user
+    avatar = request.data.get('avatar')
+
+    if not avatar:
+        return Response({'error': 'Avatar data is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Update avatar
+    user.avatar = avatar
+    user.save()
+
+    # Return updated user data
+    serializer = UserSerializer(user)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_account(request):
