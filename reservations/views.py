@@ -1372,6 +1372,7 @@ def get_public_booking(request, link):
             'quotationComments': booking.quotation_comments,
             'sendQuotationAccess': booking.send_quotation_access,
             'shareableLink': booking.shareable_link,
+            'acceptTerm': booking.accept_term,  # Include accept_term status
             'paymentDetails': payment_details_data,  # Single payment for backward compatibility
             'allPayments': payments_data,  # All payments for this booking
             'bookingOptions': booking_options_data,  # Booking options from payment or booking record

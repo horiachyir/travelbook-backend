@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from decimal import Decimal
 import uuid
 
@@ -54,6 +55,7 @@ class Booking(models.Model):
     quotation_comments = models.TextField(blank=True)
     send_quotation_access = models.BooleanField(default=True)
     shareable_link = models.CharField(max_length=500, blank=True, null=True, unique=True)
+    accept_term = models.BooleanField(default=False)  # Track if customer accepted terms
 
     # Logistics locking - prevents sales staff from editing after reconfirmation
     is_locked = models.BooleanField(default=False)

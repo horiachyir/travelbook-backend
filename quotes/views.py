@@ -1,8 +1,9 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.db import transaction
+from django.utils import timezone
 from reservations.models import Booking, BookingTour, BookingPayment
 import logging
 
@@ -65,5 +66,77 @@ def delete_quote(request, booking_id):
         return Response({
             'success': False,
             'message': 'Internal server error occurred while deleting booking',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def accept_quote_terms(request, link):
+    """
+    Accept the terms for a quote using the shareable link.
+
+    PUT /api/quotes/share/<link>/accept/
+
+    This endpoint:
+    - Updates the accept_term field to True in the bookings table
+    - Optionally updates the customer email if provided
+    - Returns the updated booking data
+
+    No authentication required - this is a public endpoint for shareable links.
+    """
+    try:
+        # Find booking by shareable_link
+        try:
+            booking = Booking.objects.get(shareable_link=link)
+        except Booking.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Quote not found or link is invalid'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if quote is still valid
+        if booking.valid_until and booking.valid_until < timezone.now():
+            return Response({
+                'success': False,
+                'message': 'This quote has expired'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if terms were already accepted
+        if booking.accept_term:
+            return Response({
+                'success': False,
+                'message': 'Terms have already been accepted for this quote'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update accept_term field
+        booking.accept_term = True
+
+        # Optionally update customer email if provided
+        customer_email = request.data.get('email')
+        if customer_email and booking.customer:
+            booking.customer.email = customer_email
+            booking.customer.save()
+
+        booking.save()
+
+        logger.info(f"Terms accepted for booking {booking.id} via shareable link {link}")
+
+        return Response({
+            'success': True,
+            'message': 'Terms accepted successfully',
+            'data': {
+                'booking_id': str(booking.id),
+                'accept_term': booking.accept_term,
+                'customer_email': booking.customer.email if booking.customer else None,
+                'valid_until': booking.valid_until.isoformat() if booking.valid_until else None
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error accepting terms for shareable link {link}: {str(e)}")
+        return Response({
+            'success': False,
+            'message': 'Internal server error occurred while accepting terms',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
