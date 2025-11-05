@@ -47,7 +47,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     language = models.CharField(max_length=10, default='en')
     timezone = models.CharField(max_length=50, default='UTC')
 
-    # User role and business fields
+    # User role and business field
     role = models.CharField(max_length=255, blank=True, null=True)
     commission = models.CharField(max_length=255, blank=True, null=True)
     status = models.CharField(max_length=255, blank=True, null=True)
