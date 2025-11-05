@@ -56,15 +56,16 @@ class SignInSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    fullName = serializers.CharField(source='full_name', read_only=True)
+    fullName = serializers.CharField(source='full_name')
     isVerified = serializers.BooleanField(source='is_verified', read_only=True)
+    isSuperuser = serializers.BooleanField(source='is_superuser', read_only=True)
     dateJoined = serializers.DateTimeField(source='date_joined', read_only=True)
-    
+
     class Meta:
         model = User
-        fields = ('id', 'email', 'fullName', 'phone', 'isVerified',
-                  'dateJoined', 'avatar', 'language', 'timezone')
-        read_only_fields = ('id', 'email', 'dateJoined', 'isVerified')
+        fields = ('id', 'email', 'fullName', 'phone', 'isVerified', 'isSuperuser',
+                  'role', 'dateJoined', 'avatar', 'language', 'timezone')
+        read_only_fields = ('id', 'email', 'dateJoined', 'isVerified', 'isSuperuser', 'role')
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):

@@ -43,7 +43,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     updated_at = models.DateTimeField(auto_now=True)
     
     # Profile fields
-    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    avatar = models.TextField(blank=True, null=True)  # Store base64 encoded image
     language = models.CharField(max_length=10, default='en')
     timezone = models.CharField(max_length=50, default='UTC')
 
