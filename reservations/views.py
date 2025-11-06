@@ -885,20 +885,21 @@ def get_all_reservations(request):
 @permission_classes([IsAuthenticated])
 def get_basic_data(request):
     """
-    Retrieve basic data from users and tours tables for frontend.
+    Retrieve basic data from users, tours, and tour_operators tables for frontend.
 
     GET /api/reservations/basic/
 
     This endpoint returns:
     - All users from the 'users' table, excluding superusers and administrators
     - All tours from the 'tours' table
+    - All tour operators from the 'tour_operators' table (only id and name fields)
 
     No user filtering is applied - returns all data stored in the database.
     Excludes users where is_superuser=True OR role='administrator'.
     """
     try:
         from django.contrib.auth import get_user_model
-        from tours.models import Tour
+        from tours.models import Tour, TourOperator
 
         User = get_user_model()
 
@@ -909,6 +910,9 @@ def get_basic_data(request):
 
         # Get all tours
         tours = Tour.objects.all().order_by('-created_at')
+
+        # Get all tour operators (only id and name)
+        tour_operators = TourOperator.objects.all().order_by('name')
 
         # Serialize users data
         users_data = []
@@ -954,16 +958,26 @@ def get_basic_data(request):
                 'updatedAt': tour.updated_at,
             })
 
+        # Serialize tour operators data (only id and name)
+        tour_operators_data = []
+        for operator in tour_operators:
+            tour_operators_data.append({
+                'id': str(operator.id),
+                'name': operator.name,
+            })
+
         return Response({
             'success': True,
-            'message': f'Retrieved {len(users_data)} users and {len(tours_data)} tours successfully',
+            'message': f'Retrieved {len(users_data)} users, {len(tours_data)} tours, and {len(tour_operators_data)} tour operators successfully',
             'data': {
                 'users': users_data,
                 'tours': tours_data,
+                'tourOperators': tour_operators_data,
             },
             'statistics': {
                 'totalUsers': len(users_data),
                 'totalTours': len(tours_data),
+                'totalTourOperators': len(tour_operators_data),
             },
             'timestamp': timezone.now(),
         }, status=status.HTTP_200_OK)

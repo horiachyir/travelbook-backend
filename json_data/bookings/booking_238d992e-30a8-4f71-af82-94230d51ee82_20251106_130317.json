@@ -1,0 +1,68 @@
+{
+  "config": {
+    "sales_person": "ba224dc5-bf8e-461a-8dfb-fa37466e469e",
+    "leadSource": "instagram",
+    "currency": "BRL"
+  },
+  "status": "pending",
+  "validUntil": "2025-12-06T12:45:55.877Z",
+  "quotationComments": "",
+  "sendQuotationAccess": true,
+  "shareableLink": "1762434187561-wco1fqdt7e",
+  "customer": {
+    "name": "Ledorana",
+    "email": "ledorana@gmail.com",
+    "phone": "23546543434",
+    "language": "pt",
+    "country": "Brazil",
+    "idNumber": "1231232131",
+    "cpf": "454",
+    "address": "Beijing-33",
+    "hotel": "Five Star",
+    "room": "322",
+    "additionalNotes": "sasa"
+  },
+  "tours": [
+    {
+      "tourId": "ba4f3edf-9434-48ea-bb3d-11ca3285a617",
+      "destination": "ff8b80ee-ecfc-48dd-bffd-e5a0ab3ec665",
+      "date": "2025-10-31T22:00:00.000Z",
+      "pickupAddress": "ddewe",
+      "pickupTime": "08:00:00",
+      "adultPax": 2,
+      "adultPrice": 180,
+      "childPax": 1,
+      "childPrice": 180,
+      "infantPax": 0,
+      "infantPrice": 0,
+      "subtotal": 540,
+      "operator": "own-operation",
+      "comments": ""
+    },
+    {
+      "tourId": "11ee45dc-fba7-4b8c-8836-45551508f668",
+      "destination": "ff8b80ee-ecfc-48dd-bffd-e5a0ab3ec665",
+      "date": "2025-11-09T22:00:00.000Z",
+      "pickupAddress": "ddewe",
+      "pickupTime": "08:00:00",
+      "adultPax": 2,
+      "adultPrice": 450,
+      "childPax": 1,
+      "childPrice": 225,
+      "infantPax": 0,
+      "infantPrice": 0,
+      "subtotal": 1125,
+      "operator": "own-operation",
+      "comments": ""
+    }
+  ],
+  "paymentDetails": {
+    "date": "2025-11-06T12:45:55.877Z",
+    "method": "",
+    "percentage": 100,
+    "amountPaid": 0,
+    "comments": "",
+    "status": "pending",
+    "receiptFile": null
+  }
+}
