@@ -1,9 +1,12 @@
-from rest_framework import status, generics
+from rest_framework import status, generics, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Tour
-from .serializers import TourSerializer, TourCreateSerializer, TourUpdateSerializer, DestinationWithToursSerializer
+from .models import Tour, TourOperator
+from .serializers import (
+    TourSerializer, TourCreateSerializer, TourUpdateSerializer,
+    DestinationWithToursSerializer, TourOperatorSerializer
+)
 from settings_app.models import Destination
 
 
@@ -127,4 +130,83 @@ class DestinationsWithToursView(generics.ListAPIView):
                 'total_tours': total_tours,
             },
             'count': total_destinations,
+        }, status=status.HTTP_200_OK)
+
+
+class TourOperatorViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing tour operators.
+
+    Provides CRUD operations for tour operator companies.
+    """
+    queryset = TourOperator.objects.all()
+    serializer_class = TourOperatorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Optionally filter operators by active status
+        """
+        queryset = TourOperator.objects.all()
+        is_active = self.request.query_params.get('is_active', None)
+
+        if is_active is not None:
+            if is_active.lower() == 'true':
+                queryset = queryset.filter(is_active=True)
+            elif is_active.lower() == 'false':
+                queryset = queryset.filter(is_active=False)
+
+        return queryset.order_by('name')
+
+    def perform_create(self, serializer):
+        """Set the created_by field to the current user"""
+        serializer.save(created_by=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """Override list to return formatted response"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response({
+            'success': True,
+            'message': f'Retrieved {queryset.count()} tour operators',
+            'data': serializer.data,
+            'count': queryset.count()
+        }, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        """Override create to return formatted response"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response({
+            'success': True,
+            'message': 'Tour operator created successfully',
+            'data': serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        """Override update to return formatted response"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({
+            'success': True,
+            'message': 'Tour operator updated successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to return formatted response"""
+        instance = self.get_object()
+        operator_name = instance.name
+        self.perform_destroy(instance)
+
+        return Response({
+            'success': True,
+            'message': f'Tour operator "{operator_name}" deleted successfully'
         }, status=status.HTTP_200_OK)

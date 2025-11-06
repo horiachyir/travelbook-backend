@@ -1,7 +1,20 @@
 from rest_framework import serializers
-from .models import Tour
+from .models import Tour, TourOperator
 from settings_app.models import Destination
 from settings_app.serializers import DestinationSerializer
+
+
+class TourOperatorSerializer(serializers.ModelSerializer):
+    """Serializer for TourOperator model"""
+
+    class Meta:
+        model = TourOperator
+        fields = [
+            'id', 'name', 'contact_person', 'email', 'phone',
+            'address', 'website', 'commission_rate', 'notes',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class TourCreateSerializer(serializers.ModelSerializer):
