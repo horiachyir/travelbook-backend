@@ -28,4 +28,8 @@ urlpatterns = [
     path('system/terms/<uuid:pk>/', views.TermsConfigDetailView.as_view(), name='terms-config-detail'),
 
     path('upload-terms/', views.upload_terms_file, name='upload-terms-file'),
+
+    # Exchange rate endpoints
+    path('system/exchange-rate/', views.ExchangeRateListCreateView.as_view(), name='exchange-rate-list-create'),
+    path('system/exchange-rate/<uuid:pk>/', views.ExchangeRateDetailView.as_view(), name='exchange-rate-detail'),
 ]

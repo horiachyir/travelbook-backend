@@ -317,8 +317,8 @@ class VehicleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ===== New Views for Settings Endpoints =====
 
-from .models import FinancialConfig, PaymentFee, PaymentAccount, TermsConfig
-from .serializers import FinancialConfigSerializer, PaymentFeeSerializer, PaymentAccountSerializer, TermsConfigSerializer
+from .models import FinancialConfig, PaymentFee, PaymentAccount, TermsConfig, ExchangeRate
+from .serializers import FinancialConfigSerializer, PaymentFeeSerializer, PaymentAccountSerializer, TermsConfigSerializer, ExchangeRateSerializer
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 import os
@@ -481,3 +481,24 @@ def upload_terms_file(request):
     # Return the saved terms config using serializer
     serializer = TermsConfigSerializer(terms_config)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ExchangeRateListCreateView(generics.ListCreateAPIView):
+    """List and create exchange rates"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExchangeRateSerializer
+
+    def get_queryset(self):
+        return ExchangeRate.objects.all().select_related('created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class ExchangeRateDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete an exchange rate"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExchangeRateSerializer
+
+    def get_queryset(self):
+        return ExchangeRate.objects.all().select_related('created_by')

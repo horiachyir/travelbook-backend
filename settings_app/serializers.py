@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Destination, SystemSettings, Vehicle, FinancialConfig, PaymentFee, PaymentAccount, TermsConfig
+from .models import Destination, SystemSettings, Vehicle, FinancialConfig, PaymentFee, PaymentAccount, TermsConfig, ExchangeRate
 
 
 class DestinationCreateSerializer(serializers.ModelSerializer):
@@ -346,3 +346,28 @@ class TermsConfigSerializer(serializers.ModelSerializer):
         model = TermsConfig
         fields = ['id', 'terms_and_conditions', 'terms_file_url', 'terms_file_name', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+
+class ExchangeRateSerializer(serializers.ModelSerializer):
+    """Serializer for Exchange Rate configuration"""
+
+    class Meta:
+        model = ExchangeRate
+        fields = ['id', 'from_currency', 'to_currency', 'rate', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def validate_rate(self, value):
+        """Validate rate is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Exchange rate must be greater than 0")
+        return value
+
+    def validate(self, data):
+        """Validate that from_currency and to_currency are different"""
+        from_currency = data.get('from_currency')
+        to_currency = data.get('to_currency')
+
+        if from_currency == to_currency:
+            raise serializers.ValidationError("From currency and to currency must be different")
+
+        return data

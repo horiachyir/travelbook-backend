@@ -195,3 +195,30 @@ class TermsConfig(models.Model):
 
     def __str__(self):
         return f"Terms Config - {self.created_at.strftime('%Y-%m-%d')}"
+
+
+class ExchangeRate(models.Model):
+    """Exchange rate configuration for currency conversions"""
+
+    CURRENCY_CHOICES = [
+        ('USD', 'US Dollar'),
+        ('EUR', 'Euro'),
+        ('BRL', 'Brazilian Real'),
+        ('ARS', 'Argentine Peso'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    from_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES)
+    to_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES)
+    rate = models.DecimalField(max_digits=15, decimal_places=6)  # e.g., 250.000000 for BRL to ARS
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='exchange_rates', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'setting_exchange_rate'
+        ordering = ['-updated_at']
+        unique_together = ['from_currency', 'to_currency']  # Prevent duplicate currency pairs
+
+    def __str__(self):
+        return f"{self.from_currency} → {self.to_currency}: {self.rate}"
