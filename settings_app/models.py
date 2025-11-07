@@ -98,3 +98,100 @@ class Vehicle(models.Model):
 
     def __str__(self):
         return f"{self.vehicle_name} - {self.brand} {self.model} ({self.license_plate})"
+
+
+class FinancialConfig(models.Model):
+    """Financial configuration settings"""
+
+    CURRENCY_CHOICES = [
+        ('USD', 'US Dollar'),
+        ('EUR', 'Euro'),
+        ('GBP', 'British Pound'),
+        ('BRL', 'Brazilian Real'),
+        ('ARS', 'Argentine Peso'),
+        ('COP', 'Colombian Peso'),
+        ('PEN', 'Peruvian Sol'),
+        ('CLP', 'Chilean Peso'),
+        ('JPY', 'Japanese Yen'),
+        ('CAD', 'Canadian Dollar'),
+        ('AUD', 'Australian Dollar'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    base_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD')
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='financial_configs', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'setting_financial_config'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Financial Config - {self.base_currency} - Tax: {self.tax_rate}%"
+
+
+class PaymentFee(models.Model):
+    """Payment method fee configuration"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    taxRate = models.DecimalField(max_digits=5, decimal_places=2, default=0.00, db_column='tax_rate')
+    bankSlipFee = models.DecimalField(max_digits=5, decimal_places=2, default=0.00, db_column='bank_slip_fee')
+    cashFee = models.DecimalField(max_digits=5, decimal_places=2, default=0.00, db_column='cash_fee')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_fees', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'setting_payment_fee'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} - Tax: {self.taxRate}%"
+
+
+class PaymentAccount(models.Model):
+    """Payment account configuration"""
+
+    CURRENCY_CHOICES = [
+        ('USD', 'US Dollar'),
+        ('EUR', 'Euro'),
+        ('GBP', 'British Pound'),
+        ('BRL', 'Brazilian Real'),
+        ('ARS', 'Argentine Peso'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    accountName = models.CharField(max_length=255, db_column='account_name')
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_accounts', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'setting_payment_account'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.accountName} - {self.currency}"
+
+
+class TermsConfig(models.Model):
+    """Terms and policies configuration"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    terms_and_conditions = models.TextField(blank=True, default='')
+    terms_file_url = models.CharField(max_length=500, blank=True, default='')
+    terms_file_name = models.CharField(max_length=255, blank=True, default='')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='terms_configs', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'setting_terms_config'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Terms Config - {self.created_at.strftime('%Y-%m-%d')}"

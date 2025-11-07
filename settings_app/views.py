@@ -1,7 +1,8 @@
 from rest_framework import status, generics, serializers
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from .models import Destination, SystemSettings, Vehicle
 from .serializers import (
     DestinationSerializer, DestinationCreateSerializer, DestinationUpdateSerializer,
@@ -312,3 +313,171 @@ class VehicleDetailView(generics.RetrieveUpdateDestroyAPIView):
             "message": f"Vehicle '{vehicle_name}' has been successfully deleted.",
             "deleted_vehicle_id": vehicle_id
         }, status=status.HTTP_200_OK)
+
+
+# ===== New Views for Settings Endpoints =====
+
+from .models import FinancialConfig, PaymentFee, PaymentAccount, TermsConfig
+from .serializers import FinancialConfigSerializer, PaymentFeeSerializer, PaymentAccountSerializer, TermsConfigSerializer
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+import os
+
+
+class FinancialConfigListCreateView(generics.ListCreateAPIView):
+    """List and create financial configurations"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = FinancialConfigSerializer
+
+    def get_queryset(self):
+        return FinancialConfig.objects.all().select_related('created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """Return all financial configs"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class FinancialConfigDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a financial configuration"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = FinancialConfigSerializer
+    
+    def get_queryset(self):
+        return FinancialConfig.objects.all().select_related('created_by')
+
+
+class PaymentFeeListCreateView(generics.ListCreateAPIView):
+    """List and create payment fees"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = PaymentFeeSerializer
+
+    def get_queryset(self):
+        return PaymentFee.objects.all().select_related('created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class PaymentFeeDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a payment fee"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = PaymentFeeSerializer
+    
+    def get_queryset(self):
+        return PaymentFee.objects.all().select_related('created_by')
+
+
+class PaymentAccountListCreateView(generics.ListCreateAPIView):
+    """List and create payment accounts"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = PaymentAccountSerializer
+
+    def get_queryset(self):
+        return PaymentAccount.objects.all().select_related('created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class PaymentAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a payment account"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = PaymentAccountSerializer
+    
+    def get_queryset(self):
+        return PaymentAccount.objects.all().select_related('created_by')
+
+
+class TermsConfigListCreateView(generics.ListCreateAPIView):
+    """List and create terms configurations"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = TermsConfigSerializer
+
+    def get_queryset(self):
+        return TermsConfig.objects.all().select_related('created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """Return all terms configs"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TermsConfigDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a terms configuration"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = TermsConfigSerializer
+    
+    def get_queryset(self):
+        return TermsConfig.objects.all().select_related('created_by')
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated])
+def upload_terms_file(request):
+    """Upload terms document file and save terms configuration"""
+
+    # Get terms_and_conditions text from request
+    terms_and_conditions = request.data.get('terms_and_conditions', '')
+
+    file_url = ''
+    file_name = ''
+
+    # Handle file upload if provided
+    if 'file' in request.FILES:
+        file = request.FILES['file']
+
+        # Validate file extension
+        allowed_extensions = ['.pdf', '.doc', '.docx']
+        file_ext = os.path.splitext(file.name)[1].lower()
+
+        if file_ext not in allowed_extensions:
+            return Response(
+                {'error': f'Invalid file type. Allowed types: {", ".join(allowed_extensions)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Create upload directory if it doesn't exist
+        upload_dir = 'terms_documents'
+
+        # Generate unique filename
+        filename = f"{request.user.id}_{file.name}"
+        file_path = os.path.join(upload_dir, filename)
+
+        # Save the file
+        saved_path = default_storage.save(file_path, ContentFile(file.read()))
+        file_url = default_storage.url(saved_path)
+        file_name = file.name
+
+    # Create or update TermsConfig record
+    terms_config = TermsConfig.objects.first()
+
+    if terms_config:
+        # Update existing record
+        terms_config.terms_and_conditions = terms_and_conditions
+        if file_url:
+            terms_config.terms_file_url = file_url
+            terms_config.terms_file_name = file_name
+        terms_config.created_by = request.user
+        terms_config.save()
+    else:
+        # Create new record
+        terms_config = TermsConfig.objects.create(
+            terms_and_conditions=terms_and_conditions,
+            terms_file_url=file_url,
+            terms_file_name=file_name,
+            created_by=request.user
+        )
+
+    # Return the saved terms config using serializer
+    serializer = TermsConfigSerializer(terms_config)
+    return Response(serializer.data, status=status.HTTP_200_OK)

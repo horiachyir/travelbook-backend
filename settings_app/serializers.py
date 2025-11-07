@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Destination, SystemSettings, Vehicle
+from .models import Destination, SystemSettings, Vehicle, FinancialConfig, PaymentFee, PaymentAccount, TermsConfig
 
 
 class DestinationCreateSerializer(serializers.ModelSerializer):
@@ -274,3 +274,75 @@ class VehicleUpdateSerializer(serializers.ModelSerializer):
         if not value or not value.strip():
             raise serializers.ValidationError("Vehicle model cannot be empty")
         return value.strip()
+
+# ===== New Serializers for Settings Endpoints =====
+
+class FinancialConfigSerializer(serializers.ModelSerializer):
+    """Serializer for Financial Configuration"""
+
+    class Meta:
+        model = FinancialConfig
+        fields = ['id', 'base_currency', 'tax_rate', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def validate_tax_rate(self, value):
+        """Validate tax rate is between 0 and 100"""
+        if isinstance(value, str):
+            try:
+                value = float(value)
+            except ValueError:
+                raise serializers.ValidationError("Tax rate must be a valid number")
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Tax rate must be between 0 and 100")
+        return value
+
+
+class PaymentFeeSerializer(serializers.ModelSerializer):
+    """Serializer for Payment Fee configuration"""
+
+    class Meta:
+        model = PaymentFee
+        fields = ['id', 'name', 'taxRate', 'bankSlipFee', 'cashFee', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def validate_taxRate(self, value):
+        """Validate tax rate is between 0 and 100"""
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Tax rate must be between 0 and 100")
+        return value
+
+    def validate_bankSlipFee(self, value):
+        """Validate bank slip fee is between 0 and 100"""
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Bank slip fee must be between 0 and 100")
+        return value
+
+    def validate_cashFee(self, value):
+        """Validate cash fee is between 0 and 100"""
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Cash fee must be between 0 and 100")
+        return value
+
+
+class PaymentAccountSerializer(serializers.ModelSerializer):
+    """Serializer for Payment Account configuration"""
+
+    class Meta:
+        model = PaymentAccount
+        fields = ['id', 'accountName', 'currency', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def validate_accountName(self, value):
+        """Validate account name is not empty"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Account name cannot be empty")
+        return value.strip()
+
+
+class TermsConfigSerializer(serializers.ModelSerializer):
+    """Serializer for Terms and Policies configuration"""
+
+    class Meta:
+        model = TermsConfig
+        fields = ['id', 'terms_and_conditions', 'terms_file_url', 'terms_file_name', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
