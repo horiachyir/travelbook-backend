@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Destination, SystemSettings, Vehicle, FinancialConfig, PaymentFee, PaymentAccount, TermsConfig, ExchangeRate
+from .models import Destination, SystemSettings, Vehicle, FinancialConfig, PaymentFee, PaymentAccount, TermsConfig, SystemAppearance, ExchangeRate
 
 
 class DestinationCreateSerializer(serializers.ModelSerializer):
@@ -346,6 +346,41 @@ class TermsConfigSerializer(serializers.ModelSerializer):
         model = TermsConfig
         fields = ['id', 'terms_and_conditions', 'terms_file_url', 'terms_file_name', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+
+class SystemAppearanceSerializer(serializers.ModelSerializer):
+    """Serializer for System Appearance configuration"""
+    company_logo_base64 = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = SystemAppearance
+        fields = ['id', 'company_logo', 'company_logo_base64', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        """Handle base64 image upload on create"""
+        base64_data = validated_data.pop('company_logo_base64', None)
+
+        if base64_data:
+            # Store the base64 data directly in the company_logo field
+            validated_data['company_logo'] = base64_data
+
+        return SystemAppearance.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        """Handle base64 image upload on update"""
+        base64_data = validated_data.pop('company_logo_base64', None)
+
+        if base64_data:
+            # Store the base64 data directly in the company_logo field
+            instance.company_logo = base64_data
+
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
 
 
 class ExchangeRateSerializer(serializers.ModelSerializer):

@@ -197,6 +197,23 @@ class TermsConfig(models.Model):
         return f"Terms Config - {self.created_at.strftime('%Y-%m-%d')}"
 
 
+class SystemAppearance(models.Model):
+    """System appearance configuration including company logo"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_logo = models.TextField(null=True, blank=True)  # Store base64 image data
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='system_appearances', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'setting_system_appearance'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"System Appearance - {self.created_at.strftime('%Y-%m-%d')}"
+
+
 class ExchangeRate(models.Model):
     """Exchange rate configuration for currency conversions"""
 

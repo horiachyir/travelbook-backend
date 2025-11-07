@@ -15,6 +15,9 @@ urlpatterns = [
     path('vehicle/<uuid:pk>/', views.VehicleDetailView.as_view(), name='vehicle-detail'),
 
     # New settings endpoints
+    path('system/appearance/', views.SystemAppearanceListCreateView.as_view(), name='system-appearance-list-create'),
+    path('system/appearance/<uuid:pk>/', views.SystemAppearanceDetailView.as_view(), name='system-appearance-detail'),
+
     path('system/financial-config/', views.FinancialConfigListCreateView.as_view(), name='financial-config-list-create'),
     path('system/financial-config/<uuid:pk>/', views.FinancialConfigDetailView.as_view(), name='financial-config-detail'),
 

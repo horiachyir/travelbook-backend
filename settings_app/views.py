@@ -317,8 +317,8 @@ class VehicleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ===== New Views for Settings Endpoints =====
 
-from .models import FinancialConfig, PaymentFee, PaymentAccount, TermsConfig, ExchangeRate
-from .serializers import FinancialConfigSerializer, PaymentFeeSerializer, PaymentAccountSerializer, TermsConfigSerializer, ExchangeRateSerializer
+from .models import FinancialConfig, PaymentFee, PaymentAccount, TermsConfig, ExchangeRate, SystemAppearance
+from .serializers import FinancialConfigSerializer, PaymentFeeSerializer, PaymentAccountSerializer, TermsConfigSerializer, ExchangeRateSerializer, SystemAppearanceSerializer
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 import os
@@ -502,3 +502,30 @@ class ExchangeRateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return ExchangeRate.objects.all().select_related('created_by')
+
+
+class SystemAppearanceListCreateView(generics.ListCreateAPIView):
+    """List and create system appearance configurations"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = SystemAppearanceSerializer
+
+    def get_queryset(self):
+        return SystemAppearance.objects.all().select_related('created_by')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """Return all system appearance configs"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SystemAppearanceDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a system appearance configuration"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = SystemAppearanceSerializer
+
+    def get_queryset(self):
+        return SystemAppearance.objects.all().select_related('created_by')
