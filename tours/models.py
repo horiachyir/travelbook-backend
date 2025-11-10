@@ -48,7 +48,8 @@ class Tour(models.Model):
     starting_point = models.CharField(max_length=255, blank=True)  # Renamed from inclusions
     departure_time = models.TimeField(null=True, blank=True)  # Renamed from default_pickup_time
     capacity = models.IntegerField(default=50)  # Renamed from max_participants
-    operator = models.CharField(max_length=255, blank=True, default='')  # Operator name as text field
+    operator = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='operator_tours')  # Tour operator (supplier user)
+    available_days = models.JSONField(default=list, blank=True)  # Array of day numbers: 0=Monday, 1=Tuesday, ..., 6=Sunday
 
     active = models.BooleanField(default=True)  # Renamed from is_active
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tours', null=True, blank=True)

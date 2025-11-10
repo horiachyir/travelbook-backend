@@ -139,3 +139,22 @@ def delete_account(request):
     user.is_active = False
     user.save()
     return Response({'message': 'Account deactivated successfully'}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_operators(request):
+    """Get list of users with role='supplier' for tour operator dropdown"""
+    operators = User.objects.filter(role='supplier', is_active=True).order_by('full_name')
+
+    # Return simplified data for dropdown
+    operators_data = [
+        {
+            'id': str(operator.id),
+            'full_name': operator.full_name,
+            'email': operator.email
+        }
+        for operator in operators
+    ]
+
+    return Response(operators_data, status=status.HTTP_200_OK)
