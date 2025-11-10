@@ -23,6 +23,8 @@ class TourCreateSerializer(serializers.ModelSerializer):
     # Map frontend field names to model field names
     adultPrice = serializers.DecimalField(source='adult_price', max_digits=10, decimal_places=2)
     childPrice = serializers.DecimalField(source='child_price', max_digits=10, decimal_places=2)
+    babyPrice = serializers.DecimalField(source='baby_price', max_digits=10, decimal_places=2, required=False, allow_null=True)
+    percentageDiscountAllowed = serializers.DecimalField(source='percentage_discount_allowed', max_digits=5, decimal_places=2, required=False, allow_null=True)
     departureTime = serializers.TimeField(source='departure_time')
     startingPoint = serializers.CharField(source='starting_point', allow_blank=True, required=False)
     destination = serializers.UUIDField()  # UUID field for destination FK
@@ -31,8 +33,13 @@ class TourCreateSerializer(serializers.ModelSerializer):
         model = Tour
         fields = [
             'name', 'description', 'destination', 'active', 'adultPrice',
-            'childPrice', 'departureTime', 'startingPoint', 'capacity', 'currency'
+            'childPrice', 'babyPrice', 'percentageDiscountAllowed', 'cost',
+            'departureTime', 'startingPoint', 'capacity', 'currency', 'operator'
         ]
+        extra_kwargs = {
+            'cost': {'required': False, 'allow_null': True},
+            'operator': {'required': False, 'allow_blank': True}
+        }
 
     def create(self, validated_data):
         # Convert destination UUID to Destination instance
@@ -58,8 +65,9 @@ class TourSerializer(serializers.ModelSerializer):
         model = Tour
         fields = [
             'id', 'name', 'destination', 'description',
-            'adult_price', 'child_price', 'currency', 'starting_point',
-            'departure_time', 'capacity', 'active', 'created_by',
+            'adult_price', 'child_price', 'baby_price', 'currency',
+            'percentage_discount_allowed', 'cost', 'starting_point',
+            'departure_time', 'capacity', 'operator', 'active', 'created_by',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
@@ -71,6 +79,8 @@ class TourUpdateSerializer(serializers.ModelSerializer):
     # Map frontend field names to model field names (same as create serializer)
     adultPrice = serializers.DecimalField(source='adult_price', max_digits=10, decimal_places=2)
     childPrice = serializers.DecimalField(source='child_price', max_digits=10, decimal_places=2)
+    babyPrice = serializers.DecimalField(source='baby_price', max_digits=10, decimal_places=2, required=False, allow_null=True)
+    percentageDiscountAllowed = serializers.DecimalField(source='percentage_discount_allowed', max_digits=5, decimal_places=2, required=False, allow_null=True)
     departureTime = serializers.TimeField(source='departure_time')
     startingPoint = serializers.CharField(source='starting_point', allow_blank=True, required=False)
     destination = serializers.UUIDField()  # UUID field for destination FK
@@ -79,8 +89,13 @@ class TourUpdateSerializer(serializers.ModelSerializer):
         model = Tour
         fields = [
             'name', 'description', 'destination', 'active', 'adultPrice',
-            'childPrice', 'departureTime', 'startingPoint', 'capacity', 'currency'
+            'childPrice', 'babyPrice', 'percentageDiscountAllowed', 'cost',
+            'departureTime', 'startingPoint', 'capacity', 'currency', 'operator'
         ]
+        extra_kwargs = {
+            'cost': {'required': False, 'allow_null': True},
+            'operator': {'required': False, 'allow_blank': True}
+        }
 
     def update(self, instance, validated_data):
         # Convert destination UUID to Destination instance if provided
@@ -106,7 +121,8 @@ class TourBasicSerializer(serializers.ModelSerializer):
         model = Tour
         fields = [
             'id', 'name', 'description', 'adult_price', 'child_price',
-            'currency', 'starting_point', 'departure_time', 'capacity',
+            'baby_price', 'currency', 'percentage_discount_allowed', 'cost',
+            'starting_point', 'departure_time', 'capacity', 'operator',
             'active', 'created_at', 'updated_at'
         ]
 

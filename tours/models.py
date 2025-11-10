@@ -39,12 +39,16 @@ class Tour(models.Model):
     # Pricing
     adult_price = models.DecimalField(max_digits=10, decimal_places=2)
     child_price = models.DecimalField(max_digits=10, decimal_places=2)
+    baby_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=10, default='USD')
+    percentage_discount_allowed = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # Percentage (0-100)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # Operational cost
 
     # Tour details
     starting_point = models.CharField(max_length=255, blank=True)  # Renamed from inclusions
     departure_time = models.TimeField(null=True, blank=True)  # Renamed from default_pickup_time
     capacity = models.IntegerField(default=50)  # Renamed from max_participants
+    operator = models.CharField(max_length=255, blank=True, default='')  # Operator name as text field
 
     active = models.BooleanField(default=True)  # Renamed from is_active
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tours', null=True, blank=True)
