@@ -483,6 +483,102 @@ def create_booking_payment(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_booking_payment_for_booking(request, booking_id):
+    """
+    Handle POST /api/bookings/{booking_id}/payments/ requests.
+
+    Create a new payment for a specific booking.
+
+    Expected data structure (simplified from invoice form):
+    {
+        "date": "2025-11-14",
+        "method": "bank-transfer",
+        "percentage": 100,
+        "amount_paid": 1500.00,
+        "status": "pending",
+        "comments": "Payment for invoice",
+        "copy_comments": true,
+        "include_payment": true,
+        "quote_comments": "",
+        "send_purchase_order": false,
+        "send_quotation_access": false
+    }
+    """
+    try:
+        data = request.data
+
+        # Get the booking
+        try:
+            booking = Booking.objects.get(id=booking_id)
+        except Booking.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': f'Booking with ID {booking_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Create the booking payment record
+        try:
+            with transaction.atomic():
+                # Parse and make date timezone-aware if it's provided as a string
+                payment_date = data.get('date')
+                if payment_date and isinstance(payment_date, str):
+                    # Parse string date and make it timezone-aware
+                    naive_date = datetime.strptime(payment_date, '%Y-%m-%d')
+                    payment_date = timezone.make_aware(naive_date)
+                elif payment_date and not timezone.is_aware(payment_date):
+                    # If it's a naive datetime, make it aware
+                    payment_date = timezone.make_aware(payment_date)
+
+                booking_payment = BookingPayment.objects.create(
+                    booking=booking,
+                    date=payment_date,
+                    method=data.get('method'),
+                    percentage=data.get('percentage', 100),
+                    amount_paid=data.get('amount_paid'),
+                    comments=data.get('comments', ''),
+                    status=data.get('status', 'pending'),
+                    receipt_file=data.get('receipt_file'),
+                    copy_comments=data.get('copy_comments', True),
+                    include_payment=data.get('include_payment', True),
+                    quote_comments=data.get('quote_comments', ''),
+                    send_purchase_order=data.get('send_purchase_order', False),
+                    send_quotation_access=data.get('send_quotation_access', False),
+                    created_by=request.user
+                )
+
+                return Response({
+                    'success': True,
+                    'message': 'Payment created successfully',
+                    'data': {
+                        'payment_id': booking_payment.id,
+                        'booking_id': str(booking.id),
+                        'amount_paid': float(booking_payment.amount_paid),
+                        'method': booking_payment.method,
+                        'status': booking_payment.status,
+                        'date': booking_payment.date,
+                        'created_at': booking_payment.created_at
+                    }
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            logger.error(f"Error creating booking payment: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Error creating payment',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except Exception as e:
+        logger.error(f"Error processing payment request: {str(e)}")
+        return Response({
+            'success': False,
+            'message': 'Internal server error occurred while processing payment',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 def update_booking_payment(request, booking_id):
