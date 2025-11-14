@@ -42,6 +42,17 @@ class TourListCreateView(generics.ListCreateAPIView):
         # Set the created_by to the current authenticated user
         serializer.save(created_by=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        """Override create to return full tour data after creation"""
+        # Use create serializer for validation and creation
+        create_serializer = TourCreateSerializer(data=request.data)
+        create_serializer.is_valid(raise_exception=True)
+        tour_instance = create_serializer.save(created_by=request.user)
+
+        # Return full tour data using the read serializer
+        response_serializer = TourSerializer(tour_instance)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
 
 class TourDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]

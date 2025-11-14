@@ -29,14 +29,14 @@ class TourCreateSerializer(serializers.ModelSerializer):
     startingPoint = serializers.CharField(source='starting_point', allow_blank=True, required=False)
     availableDays = serializers.ListField(source='available_days', child=serializers.IntegerField(min_value=0, max_value=6), required=False, default=list)
     destination = serializers.UUIDField()  # UUID field for destination FK
-    operator = serializers.UUIDField(required=False, allow_null=True)  # UUID field for operator FK
+    operators = serializers.ListField(child=serializers.UUIDField(), required=False, default=list)  # List of operator UUIDs
 
     class Meta:
         model = Tour
         fields = [
             'name', 'description', 'destination', 'active', 'adultPrice',
             'childPrice', 'babyPrice', 'percentageDiscountAllowed', 'cost',
-            'departureTime', 'startingPoint', 'capacity', 'currency', 'operator',
+            'departureTime', 'startingPoint', 'capacity', 'currency', 'operators',
             'availableDays'
         ]
         extra_kwargs = {
@@ -52,28 +52,33 @@ class TourCreateSerializer(serializers.ModelSerializer):
         except Destination.DoesNotExist:
             raise serializers.ValidationError({"destination": "Invalid destination ID"})
 
-        # Convert operator UUID to User instance if provided
-        operator_id = validated_data.pop('operator', None)
-        if operator_id:
-            try:
-                from django.contrib.auth import get_user_model
-                User = get_user_model()
-                operator = User.objects.get(id=operator_id, role='supplier')
-                validated_data['operator'] = operator
-            except User.DoesNotExist:
-                raise serializers.ValidationError({"operator": "Invalid operator ID or user is not a supplier"})
+        # Extract operator IDs for later M2M assignment
+        operator_ids = validated_data.pop('operators', [])
 
         # Set default currency if not provided
         validated_data.setdefault('currency', 'USD')
 
-        return Tour.objects.create(**validated_data)
+        # Create tour instance
+        tour = Tour.objects.create(**validated_data)
+
+        # Add operators if provided
+        if operator_ids:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            operators = User.objects.filter(id__in=operator_ids, role='supplier')
+            if operators.count() != len(operator_ids):
+                tour.delete()
+                raise serializers.ValidationError({"operators": "One or more operator IDs are invalid or not suppliers"})
+            tour.operators.set(operators)
+
+        return tour
 
 
 class TourSerializer(serializers.ModelSerializer):
     """Full tour serializer for read operations"""
 
     destination = DestinationSerializer(read_only=True)
-    operator = serializers.SerializerMethodField()
+    operators = serializers.SerializerMethodField()
 
     class Meta:
         model = Tour
@@ -81,20 +86,21 @@ class TourSerializer(serializers.ModelSerializer):
             'id', 'name', 'destination', 'description',
             'adult_price', 'child_price', 'baby_price', 'currency',
             'percentage_discount_allowed', 'cost', 'starting_point',
-            'departure_time', 'capacity', 'operator', 'available_days', 'active', 'created_by',
+            'departure_time', 'capacity', 'operators', 'available_days', 'active', 'created_by',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
-    def get_operator(self, obj):
-        """Return operator details if exists"""
-        if obj.operator:
-            return {
-                'id': str(obj.operator.id),
-                'full_name': obj.operator.full_name,
-                'email': obj.operator.email
+    def get_operators(self, obj):
+        """Return list of operator details"""
+        return [
+            {
+                'id': str(operator.id),
+                'full_name': operator.full_name,
+                'email': operator.email
             }
-        return None
+            for operator in obj.operators.all()
+        ]
 
 
 class TourUpdateSerializer(serializers.ModelSerializer):
@@ -109,14 +115,14 @@ class TourUpdateSerializer(serializers.ModelSerializer):
     startingPoint = serializers.CharField(source='starting_point', allow_blank=True, required=False)
     availableDays = serializers.ListField(source='available_days', child=serializers.IntegerField(min_value=0, max_value=6), required=False, default=list)
     destination = serializers.UUIDField()  # UUID field for destination FK
-    operator = serializers.UUIDField(required=False, allow_null=True)  # UUID field for operator FK
+    operators = serializers.ListField(child=serializers.UUIDField(), required=False, default=list)  # List of operator UUIDs
 
     class Meta:
         model = Tour
         fields = [
             'name', 'description', 'destination', 'active', 'adultPrice',
             'childPrice', 'babyPrice', 'percentageDiscountAllowed', 'cost',
-            'departureTime', 'startingPoint', 'capacity', 'currency', 'operator',
+            'departureTime', 'startingPoint', 'capacity', 'currency', 'operators',
             'availableDays'
         ]
         extra_kwargs = {
@@ -133,24 +139,24 @@ class TourUpdateSerializer(serializers.ModelSerializer):
             except Destination.DoesNotExist:
                 raise serializers.ValidationError({"destination": "Invalid destination ID"})
 
-        # Convert operator UUID to User instance if provided
-        if 'operator' in validated_data:
-            operator_id = validated_data.pop('operator')
-            if operator_id:
-                try:
-                    from django.contrib.auth import get_user_model
-                    User = get_user_model()
-                    operator = User.objects.get(id=operator_id, role='supplier')
-                    validated_data['operator'] = operator
-                except User.DoesNotExist:
-                    raise serializers.ValidationError({"operator": "Invalid operator ID or user is not a supplier"})
-            else:
-                validated_data['operator'] = None
+        # Handle operators M2M relationship
+        operator_ids = validated_data.pop('operators', None)
+        if operator_ids is not None:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            operators = User.objects.filter(id__in=operator_ids, role='supplier')
+            if operators.count() != len(operator_ids):
+                raise serializers.ValidationError({"operators": "One or more operator IDs are invalid or not suppliers"})
 
         # Update fields
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save()
+
+        # Update operators if provided
+        if operator_ids is not None:
+            instance.operators.set(operators)
+
         return instance
 
 
