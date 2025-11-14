@@ -186,6 +186,11 @@ def financial_dashboard(request):
     fixed_expenses_total = expenses.filter(expense_type='fixed').aggregate(total=Sum('amount'))['total'] or Decimal('0')
     variable_expenses_total = expenses.filter(expense_type='variable').aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
+    # Expenses by cost type (FC, IVC, DVC)
+    fc_expenses_total = expenses.filter(cost_type='fc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    ivc_expenses_total = expenses.filter(cost_type='ivc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    dvc_expenses_total = expenses.filter(cost_type='dvc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
     # Expenses by status
     pending_expenses = expenses.filter(payment_status='pending').aggregate(total=Sum('amount'))['total'] or Decimal('0')
     paid_expenses = expenses.filter(payment_status='paid').aggregate(total=Sum('amount'))['total'] or Decimal('0')
@@ -315,6 +320,9 @@ def financial_dashboard(request):
             'total': float(total_expenses),
             'fixed': float(fixed_expenses_total),
             'variable': float(variable_expenses_total),
+            'fc': float(fc_expenses_total),
+            'ivc': float(ivc_expenses_total),
+            'dvc': float(dvc_expenses_total),
             'pending': float(pending_expenses),
             'paid': float(paid_expenses),
             'overdue': float(overdue_expenses),

@@ -11,6 +11,12 @@ class Expense(models.Model):
         ('variable', 'Variable'),
     ]
 
+    COST_TYPE_CHOICES = [
+        ('fc', 'Fixed Cost (FC) - Monthly cost that does not change with sales'),
+        ('ivc', 'Indirect Variable Cost (IVC) - Changes with sales but not linked to specific sale'),
+        ('dvc', 'Direct Variable Cost (DVC) - Only exists when sale happens and tied to that sale'),
+    ]
+
     CATEGORY_CHOICES = [
         ('salary', 'Salary'),
         ('rent', 'Rent'),
@@ -72,6 +78,7 @@ class Expense(models.Model):
     # Basic Information
     name = models.CharField(max_length=255, help_text="Expense name/description")
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default='variable')
+    cost_type = models.CharField(max_length=10, choices=COST_TYPE_CHOICES, default='fc', help_text="Cost classification: FC, IVC, or DVC")
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
     description = models.TextField(blank=True, null=True, help_text="Detailed description")
 
