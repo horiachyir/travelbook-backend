@@ -168,7 +168,7 @@ class TourBasicSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'adult_price', 'child_price',
             'baby_price', 'currency', 'percentage_discount_allowed', 'cost',
-            'starting_point', 'departure_time', 'capacity', 'operator',
+            'starting_point', 'departure_time', 'capacity', 'operators',
             'active', 'created_at', 'updated_at'
         ]
 
