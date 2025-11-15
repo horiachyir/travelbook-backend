@@ -1,5 +1,11 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
+from financial.views import FinancialCategoryViewSet
+
+# Router for financial categories
+router = DefaultRouter()
+router.register(r'system/categories', FinancialCategoryViewSet, basename='financial-category')
 
 urlpatterns = [
     # Destinations endpoints
@@ -35,4 +41,7 @@ urlpatterns = [
     # Exchange rate endpoints
     path('system/exchange-rate/', views.ExchangeRateListCreateView.as_view(), name='exchange-rate-list-create'),
     path('system/exchange-rate/<uuid:pk>/', views.ExchangeRateDetailView.as_view(), name='exchange-rate-detail'),
+
+    # Include router URLs for financial categories
+    path('', include(router.urls)),
 ]

@@ -7,8 +7,8 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from .models import Expense, FinancialAccount
-from .serializers import ExpenseSerializer, FinancialAccountSerializer
+from .models import Expense, FinancialAccount, FinancialCategory
+from .serializers import ExpenseSerializer, FinancialAccountSerializer, FinancialCategorySerializer
 from reservations.models import Booking, BookingPayment
 from commissions.models import Commission
 
@@ -119,6 +119,35 @@ class FinancialAccountViewSet(viewsets.ModelViewSet):
         return queryset
 
 
+class FinancialCategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing financial categories
+    Supports GET (list/detail), POST (create), PUT/PATCH (update), DELETE (delete)
+    """
+    queryset = FinancialCategory.objects.all()
+    serializer_class = FinancialCategorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = FinancialCategory.objects.select_related('created_by').all()
+
+        # Filter by active status
+        is_active = self.request.query_params.get('isActive', None)
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        # Search by name
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+
+        return queryset.order_by('name')
+
+    def get_serializer_context(self):
+        """Pass request to serializer for created_by field"""
+        return {'request': self.request}
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def financial_dashboard(request):
@@ -144,11 +173,15 @@ def financial_dashboard(request):
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
 
+    # Convert dates to timezone-aware datetimes for querying DateTimeFields
+    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+
     # ========== INCOME/REVENUE (from Bookings and Payments) ==========
 
     # Get all payments in date range
     payments = BookingPayment.objects.filter(
-        date__range=[start_date, end_date]
+        date__range=[start_datetime, end_datetime]
     )
 
     # Filter by currency if specified
@@ -205,7 +238,7 @@ def financial_dashboard(request):
     # ========== COMMISSIONS ==========
 
     commissions = Commission.objects.filter(
-        created_at__range=[start_date, timezone.make_aware(datetime.combine(end_date, datetime.max.time()))]
+        created_at__range=[start_datetime, end_datetime]
     )
 
     if currency_filter and currency_filter != 'ALL':
@@ -222,13 +255,32 @@ def financial_dashboard(request):
 
     accounts = FinancialAccount.objects.filter(is_active=True)
 
-    if currency_filter and currency_filter != 'ALL':
-        accounts = accounts.filter(currency=currency_filter)
+    # Don't filter accounts by currency - show all accounts
+    # But pass the selected currency for conversion
+    accounts_data = FinancialAccountSerializer(
+        accounts,
+        many=True,
+        context={'target_currency': currency_filter}
+    ).data
 
-    accounts_data = FinancialAccountSerializer(accounts, many=True).data
+    # Total balance across all accounts (converted to selected currency)
+    total_balance = Decimal('0')
+    exchange_rates = {
+        'USD': Decimal('1.00'),
+        'EUR': Decimal('0.92'),
+        'CLP': Decimal('950.00'),
+        'BRL': Decimal('5.00'),
+        'ARS': Decimal('800.00'),
+    }
 
-    # Total balance across all accounts
-    total_balance = accounts.aggregate(total=Sum('current_balance'))['total'] or Decimal('0')
+    for account in accounts:
+        if account.currency == currency_filter:
+            total_balance += account.current_balance
+        elif account.currency in exchange_rates and currency_filter in exchange_rates:
+            # Convert to USD first, then to target currency
+            amount_in_usd = account.current_balance / exchange_rates[account.currency]
+            converted_amount = amount_in_usd * exchange_rates[currency_filter]
+            total_balance += converted_amount
 
     # ========== CASH FLOW ==========
 
@@ -260,9 +312,13 @@ def financial_dashboard(request):
         else:
             month_end = month_start.replace(month=month_start.month + 1, day=1) - timedelta(days=1)
 
+        # Convert month dates to timezone-aware datetimes
+        month_start_dt = timezone.make_aware(datetime.combine(month_start, datetime.min.time()))
+        month_end_dt = timezone.make_aware(datetime.combine(month_end, datetime.max.time()))
+
         # Revenue for this month
         month_revenue = BookingPayment.objects.filter(
-            date__range=[month_start, month_end]
+            date__range=[month_start_dt, month_end_dt]
         ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
 
         # Expenses for this month
@@ -272,10 +328,7 @@ def financial_dashboard(request):
 
         # Commissions for this month
         month_commissions = Commission.objects.filter(
-            created_at__range=[
-                timezone.make_aware(datetime.combine(month_start, datetime.min.time())),
-                timezone.make_aware(datetime.combine(month_end, datetime.max.time()))
-            ]
+            created_at__range=[month_start_dt, month_end_dt]
         ).aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
 
         monthly_data.append({

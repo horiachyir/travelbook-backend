@@ -183,3 +183,27 @@ class FinancialAccount(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.currency} {self.current_balance})"
+
+
+class FinancialCategory(models.Model):
+    """
+    Model for managing financial categories (expense/income categories)
+    Used in Administrative Settings
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100, unique=True, help_text="Category name")
+    description = models.TextField(blank=True, null=True, help_text="Category description")
+    is_active = models.BooleanField(default=True, help_text="Whether this category is active")
+
+    # Audit fields
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_categories')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Financial Category'
+        verbose_name_plural = 'Financial Categories'
+
+    def __str__(self):
+        return self.name
