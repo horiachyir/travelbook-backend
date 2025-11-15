@@ -38,7 +38,7 @@ STATUS_CHOICES = [
     ('cancelled', 'Cancelled'),
     ('completed', 'Completed'),
     ('reconfirmed', 'Reconfirmed'),  # NEW
-    ('no-show', 'No Show'),  # NEW
+    ('no-show', 'No Show'),  
 ]
 ```
 
