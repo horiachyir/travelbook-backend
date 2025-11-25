@@ -1,36 +1,32 @@
 from django.contrib import admin
-from .models import Expense
+from .models import Expense, FinancialCategory
 
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ('name', 'expense_type', 'category', 'amount', 'currency', 'payment_status', 'due_date', 'created_at')
-    list_filter = ('expense_type', 'category', 'payment_status', 'currency', 'recurrence')
-    search_fields = ('name', 'description', 'vendor', 'invoice_number', 'reference')
+    list_display = ('id', 'person', 'expense_type', 'category', 'amount', 'currency', 'due_date', 'payment_date', 'created_at')
+    list_filter = ('expense_type', 'category', 'currency', 'recurrence')
+    search_fields = ('description', 'notes', 'person__full_name', 'person__email')
     date_hierarchy = 'due_date'
-    readonly_fields = ('created_at', 'updated_at', 'created_by')
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'is_overdue', 'payment_status')
 
     fieldsets = (
         ('Basic Information', {
-            'fields': ('name', 'expense_type', 'category', 'description')
+            'fields': ('person', 'expense_type', 'cost_type', 'category', 'description')
         }),
         ('Financial Information', {
-            'fields': ('amount', 'currency', 'payment_status', 'payment_method', 'payment_date', 'due_date')
+            'fields': ('amount', 'currency', 'due_date', 'payment_date')
         }),
         ('Recurrence', {
-            'fields': ('recurrence', 'recurrence_end_date'),
+            'fields': ('recurrence',),
             'classes': ('collapse',)
         }),
-        ('Vendor Information', {
-            'fields': ('vendor', 'vendor_id_number', 'invoice_number', 'receipt_file'),
+        ('Documents', {
+            'fields': ('attachment', 'notes'),
             'classes': ('collapse',)
         }),
-        ('Organization', {
-            'fields': ('department', 'reference', 'notes'),
-            'classes': ('collapse',)
-        }),
-        ('Approval', {
-            'fields': ('requires_approval', 'approved_by', 'approved_at'),
+        ('Status (Read-only)', {
+            'fields': ('is_overdue', 'payment_status'),
             'classes': ('collapse',)
         }),
         ('Audit', {
@@ -38,6 +34,19 @@ class ExpenseAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(FinancialCategory)
+class FinancialCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_active', 'created_at')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'description')
+    readonly_fields = ('created_at', 'updated_at', 'created_by')
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:

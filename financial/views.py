@@ -23,7 +23,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Expense.objects.all()
+        queryset = Expense.objects.select_related('person', 'created_by').all()
 
         # Filter by expense type
         expense_type = self.request.query_params.get('expenseType', None)
@@ -34,11 +34,6 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         category = self.request.query_params.get('category', None)
         if category:
             queryset = queryset.filter(category=category)
-
-        # Filter by payment status
-        payment_status = self.request.query_params.get('paymentStatus', None)
-        if payment_status:
-            queryset = queryset.filter(payment_status=payment_status)
 
         # Filter by date range
         start_date = self.request.query_params.get('startDate', None)
@@ -51,13 +46,19 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         search = self.request.query_params.get('search', None)
         if search:
             queryset = queryset.filter(
-                Q(name__icontains=search) |
                 Q(description__icontains=search) |
-                Q(vendor__icontains=search) |
-                Q(invoice_number__icontains=search)
+                Q(notes__icontains=search) |
+                Q(person__full_name__icontains=search) |
+                Q(person__email__icontains=search)
             )
 
         return queryset.order_by('-due_date')
+
+    def list(self, request, *args, **kwargs):
+        """Override list to return array directly (not paginated)"""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -65,14 +66,23 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         Get expense summary statistics
         """
         queryset = self.get_queryset()
+        today = timezone.now().date()
 
-        # Total expenses by status
-        total_pending = queryset.filter(payment_status='pending').aggregate(
+        # Calculate totals based on payment_date (derived status)
+        # Paid: has payment_date
+        # Overdue: no payment_date and due_date < today
+        # Pending: no payment_date and due_date >= today
+
+        total_paid = queryset.filter(payment_date__isnull=False).aggregate(
             total=Sum('amount'))['total'] or 0
-        total_paid = queryset.filter(payment_status='paid').aggregate(
-            total=Sum('amount'))['total'] or 0
-        total_overdue = queryset.filter(payment_status='overdue').aggregate(
-            total=Sum('amount'))['total'] or 0
+        total_overdue = queryset.filter(
+            payment_date__isnull=True,
+            due_date__lt=today
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        total_pending = queryset.filter(
+            payment_date__isnull=True,
+            due_date__gte=today
+        ).aggregate(total=Sum('amount'))['total'] or 0
 
         # Expenses by type
         fixed_expenses = queryset.filter(expense_type='fixed').aggregate(
@@ -201,10 +211,11 @@ def financial_dashboard(request):
     ivc_expenses_total = expenses.filter(cost_type='ivc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
     dvc_expenses_total = expenses.filter(cost_type='dvc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
-    # Expenses by status
-    pending_expenses = expenses.filter(payment_status='pending').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    paid_expenses = expenses.filter(payment_status='paid').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    overdue_expenses = expenses.filter(payment_status='overdue').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    # Expenses by status (derived from payment_date and due_date)
+    today = timezone.now().date()
+    paid_expenses = expenses.filter(payment_date__isnull=False).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    overdue_expenses = expenses.filter(payment_date__isnull=True, due_date__lt=today).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    pending_expenses = expenses.filter(payment_date__isnull=True, due_date__gte=today).aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
     # Expenses by category
     expenses_by_category = expenses.values('category').annotate(
@@ -281,14 +292,9 @@ def financial_dashboard(request):
             method__icontains=account_name.replace('.', '').replace(' ', '-').lower()
         ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
 
-        # Calculate outgoing payments (expenses) for this account
-        outgoing_expenses = Expense.objects.filter(
-            payment_status='paid',
-            payment_method__icontains=account_name.replace('.', '').replace(' ', '-').lower()
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-
-        # Calculate current balance (incoming - outgoing)
-        current_balance = incoming_payments - outgoing_expenses
+        # For outgoing expenses, we no longer have payment_method field
+        # So just use the current_balance from incoming payments
+        current_balance = incoming_payments
 
         # Convert balance to selected currency if needed
         converted_balance = None
@@ -501,10 +507,10 @@ def payables_list(request):
     """
     Get all payables (pending expenses and commissions)
     """
-    # Get pending expenses
-    expenses = Expense.objects.filter(
-        payment_status__in=['pending', 'overdue']
-    )
+    today = timezone.now().date()
+
+    # Get all expenses (we'll calculate derived status)
+    expenses = Expense.objects.select_related('person').all()
 
     # Get pending commissions
     commissions = Commission.objects.filter(
@@ -525,14 +531,21 @@ def payables_list(request):
     }
 
     for expense in expenses:
+        # Derive payment status from payment_date and due_date
+        if expense.payment_date:
+            status = 'paid'
+        elif expense.due_date and expense.due_date < today:
+            status = 'overdue'
+        else:
+            status = 'pending'
+
         data['expenses'].append({
             'id': str(expense.id),
-            'name': expense.name,
-            'vendor': expense.vendor,
+            'person_name': expense.person.full_name if expense.person else None,
             'amount': float(expense.amount),
             'currency': expense.currency,
-            'dueDate': expense.due_date,
-            'status': expense.payment_status,
+            'dueDate': expense.due_date.strftime('%Y-%m-%d') if expense.due_date else None,
+            'status': status,
             'category': expense.category,
             'expenseType': expense.expense_type
         })

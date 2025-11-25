@@ -36,34 +36,12 @@ class Expense(models.Model):
         ('other', 'Other'),
     ]
 
-    PAYMENT_STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('paid', 'Paid'),
-        ('overdue', 'Overdue'),
-        ('cancelled', 'Cancelled'),
-    ]
-
     CURRENCY_CHOICES = [
         ('CLP', 'Chilean Peso'),
         ('USD', 'US Dollar'),
         ('EUR', 'Euro'),
         ('BRL', 'Brazilian Real'),
         ('ARS', 'Argentine Peso'),
-    ]
-
-    PAYMENT_METHOD_CHOICES = [
-        ('pagarme-brl', 'Pagar.me (BRL)'),
-        ('sicred-pix-brl', 'Sicred – Pix (BRL)'),
-        ('cash-brl', 'Cash (BRL)'),
-        ('cash-ars', 'Cash (ARS)'),
-        ('cash-usd', 'Cash (USD)'),
-        ('asaas-brl', 'Asaas (BRL)'),
-        ('santander-ar', 'Santander (AR)'),
-        ('wise-brl', 'Wise (BRL)'),
-        ('wise-usd', 'Wise (USD)'),
-        ('wise-eur', 'Wise (EUR)'),
-        ('wise-clp', 'Wise (CLP)'),
-        ('mercado-pago-ar', 'Mercado Pago (AR)'),
     ]
 
     RECURRENCE_CHOICES = [
@@ -78,8 +56,10 @@ class Expense(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    # Person/User associated with expense
+    person = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='person_expenses', help_text="Person/User associated with this expense")
+
     # Basic Information
-    name = models.CharField(max_length=255, blank=True, null=True, help_text="Expense name/description (optional)")
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default='fc')
     cost_type = models.CharField(max_length=10, choices=COST_TYPE_CHOICES, default='fc', help_text="Cost classification: FC, IVC, or DVC")
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
@@ -87,41 +67,20 @@ class Expense(models.Model):
 
     # Financial Information
     amount = models.DecimalField(max_digits=12, decimal_places=2, help_text="Expense amount")
-    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='CLP')
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD')
 
-    # Payment Information
-    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
-    payment_method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES, blank=True, null=True)
-    payment_date = models.DateField(blank=True, null=True, help_text="When the expense was paid")
+    # Date Information
     due_date = models.DateField(help_text="When the expense is due")
+    payment_date = models.DateField(blank=True, null=True, help_text="When the expense was paid")
 
-    # Recurrence Information (for fixed expenses)
+    # Recurrence Information
     recurrence = models.CharField(max_length=20, choices=RECURRENCE_CHOICES, default='once')
-    recurrence_end_date = models.DateField(blank=True, null=True, help_text="When recurrence ends")
-
-    # Vendor/Supplier Information
-    vendor = models.CharField(max_length=255, blank=True, null=True, help_text="Vendor or supplier name")
-    vendor_id_number = models.CharField(max_length=100, blank=True, null=True, help_text="Vendor ID or tax number")
-
-    # Person/User associated with expense
-    person = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='person_expenses', help_text="Person/User associated with this expense")
 
     # Document Management
-    invoice_number = models.CharField(max_length=100, blank=True, null=True, help_text="Invoice or receipt number")
-    receipt_file = models.FileField(upload_to='financial/expenses/', blank=True, null=True)
     attachment = models.FileField(upload_to='financial/expenses/attachments/', blank=True, null=True, help_text="Attachment file")
 
-    # Department/Cost Center (legacy - can be removed in future)
-    department = models.CharField(max_length=100, blank=True, null=True, help_text="Department or cost center")
-
-    # Notes and References
+    # Notes
     notes = models.TextField(blank=True, null=True)
-    reference = models.CharField(max_length=255, blank=True, null=True, help_text="External reference or PO number")
-
-    # Approval Workflow
-    requires_approval = models.BooleanField(default=False)
-    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_expenses')
-    approved_at = models.DateTimeField(blank=True, null=True)
 
     # Audit Fields
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_expenses')
@@ -131,22 +90,33 @@ class Expense(models.Model):
     class Meta:
         ordering = ['-due_date', '-created_at']
         indexes = [
-            models.Index(fields=['expense_type', 'payment_status']),
+            models.Index(fields=['expense_type']),
             models.Index(fields=['due_date']),
             models.Index(fields=['payment_date']),
             models.Index(fields=['category']),
         ]
 
     def __str__(self):
-        return f"{self.name} - {self.currency} {self.amount} ({self.get_expense_type_display()})"
+        person_name = self.person.full_name if self.person else 'Unknown'
+        return f"{person_name} - {self.currency} {self.amount} ({self.get_expense_type_display()})"
 
     @property
     def is_overdue(self):
-        """Check if expense is overdue"""
+        """Check if expense is overdue based on due_date and payment_date"""
         from django.utils import timezone
-        if self.payment_status == 'pending' and self.due_date:
+        if self.payment_date is None and self.due_date:
             return self.due_date < timezone.now().date()
         return False
+
+    @property
+    def payment_status(self):
+        """Derive payment status from payment_date and due_date"""
+        from django.utils import timezone
+        if self.payment_date:
+            return 'paid'
+        elif self.due_date and self.due_date < timezone.now().date():
+            return 'overdue'
+        return 'pending'
 
 
 class FinancialCategory(models.Model):
