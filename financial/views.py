@@ -25,6 +25,11 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Expense.objects.select_related('person', 'created_by', 'payment_account').all()
 
+        # For detail actions (retrieve, update, destroy), don't apply filters
+        # This ensures we can find the expense by ID regardless of date range
+        if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
+            return queryset
+
         # Filter by expense type
         expense_type = self.request.query_params.get('expenseType', None)
         if expense_type:
