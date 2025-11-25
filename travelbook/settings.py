@@ -240,7 +240,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8080",
     "http://localhost:8080",
     "http://localhost:8081",
-    "https://travelbook-henna.vercel.app"
+    "https://travelbook-henna.vercel.app",
+    "https://travelbook-lilac.vercel.app"
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -251,7 +252,9 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8080",
     "http://localhost:8080",
     "http://localhost:8081",
-    "https://travelbook-henna.vercel.app"
+    "https://travelbook-henna.vercel.app",
+    "https://travelbook-lilac.vercel.app",
+    "https://travelbook-backend.onrender.com"
 ]
 
 CORS_ALLOW_METHODS = [
