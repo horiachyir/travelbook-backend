@@ -23,7 +23,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Expense.objects.select_related('person', 'created_by').all()
+        queryset = Expense.objects.select_related('person', 'created_by', 'payment_account').all()
 
         # Filter by expense type
         expense_type = self.request.query_params.get('expenseType', None)
@@ -510,7 +510,7 @@ def payables_list(request):
     today = timezone.now().date()
 
     # Get all expenses (we'll calculate derived status)
-    expenses = Expense.objects.select_related('person').all()
+    expenses = Expense.objects.select_related('person', 'payment_account').all()
 
     # Get pending commissions
     commissions = Commission.objects.filter(
@@ -547,7 +547,9 @@ def payables_list(request):
             'dueDate': expense.due_date.strftime('%Y-%m-%d') if expense.due_date else None,
             'status': status,
             'category': expense.category,
-            'expenseType': expense.expense_type
+            'expenseType': expense.expense_type,
+            'payment_account_id': str(expense.payment_account.id) if expense.payment_account else None,
+            'payment_account_name': expense.payment_account.accountName if expense.payment_account else None,
         })
 
     for commission in commissions:

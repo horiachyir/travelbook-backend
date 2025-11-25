@@ -73,6 +73,16 @@ class Expense(models.Model):
     due_date = models.DateField(help_text="When the expense is due")
     payment_date = models.DateField(blank=True, null=True, help_text="When the expense was paid")
 
+    # Payment Account (Bank Account used for payment)
+    payment_account = models.ForeignKey(
+        'settings_app.PaymentAccount',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expenses',
+        help_text="Bank account/payment method used to pay this expense"
+    )
+
     # Recurrence Information
     recurrence = models.CharField(max_length=20, choices=RECURRENCE_CHOICES, default='once')
 

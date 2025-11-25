@@ -6,6 +6,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     person_name = serializers.SerializerMethodField()
     person_id = serializers.UUIDField(source='person.id', read_only=True)
+    payment_account_id = serializers.UUIDField(source='payment_account.id', read_only=True)
+    payment_account_name = serializers.SerializerMethodField()
     is_overdue = serializers.BooleanField(read_only=True)
     payment_status = serializers.CharField(read_only=True)
 
@@ -16,15 +18,17 @@ class ExpenseSerializer(serializers.ModelSerializer):
             'expense_type', 'cost_type', 'category', 'description',
             'amount', 'currency',
             'due_date', 'payment_date',
+            'payment_account', 'payment_account_id', 'payment_account_name',
             'recurrence',
             'attachment',
             'notes',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
             'is_overdue', 'payment_status'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'payment_status', 'person_id', 'person_name']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'payment_status', 'person_id', 'person_name', 'payment_account_id', 'payment_account_name']
         extra_kwargs = {
             'person': {'required': False, 'allow_null': True},
+            'payment_account': {'required': False, 'allow_null': True},
             'attachment': {'required': False, 'allow_null': True},
             'payment_date': {'required': False, 'allow_null': True},
             'description': {'required': False, 'allow_blank': True, 'allow_null': True},
@@ -41,6 +45,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
         """Get the name of the associated person"""
         if obj.person:
             return obj.person.full_name or obj.person.email
+        return None
+
+    def get_payment_account_name(self, obj):
+        """Get the name of the payment account"""
+        if obj.payment_account:
+            return obj.payment_account.accountName
         return None
 
     def create(self, validated_data):
