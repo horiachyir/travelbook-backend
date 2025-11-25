@@ -2,7 +2,11 @@ from django.urls import path, re_path
 from . import views, logistics_views
 
 urlpatterns = [
-    # Confirmed reservations endpoint
+    # Lightweight endpoint for recipe dialog dropdown (fast)
+    path('reservation/recipe-options/', views.get_bookings_for_recipe, name='get_bookings_for_recipe'),
+    re_path(r'^reservation/recipe-options/?$', views.get_bookings_for_recipe, name='get_bookings_for_recipe_no_slash'),
+
+    # Confirmed reservations endpoint (full data - slower)
     path('reservation/confirm/', views.get_confirmed_reservations, name='get_confirmed_reservations'),
     re_path(r'^reservation/confirm/?$', views.get_confirmed_reservations, name='get_confirmed_reservations_no_slash'),
 

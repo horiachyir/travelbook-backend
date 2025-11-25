@@ -1114,6 +1114,73 @@ def get_basic_data(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_bookings_for_recipe(request):
+    """
+    Lightweight endpoint to get confirmed bookings for the Recipe dialog dropdown.
+
+    GET /api/reservation/recipe-options/
+
+    Returns only the minimal data needed for the Select Booking dropdown:
+    - id, customer name, email, totalAmount, currency, status
+
+    This is much faster than get_confirmed_reservations as it:
+    - Uses only() to fetch minimal fields
+    - Skips tours details, payments, and other heavy data
+    """
+    try:
+        from django.db.models import Sum
+
+        # Get confirmed bookings with minimal data
+        bookings = Booking.objects.filter(
+            status='confirmed'
+        ).select_related(
+            'customer'
+        ).annotate(
+            total_amount=Sum('booking_tours__subtotal')
+        ).only(
+            'id',
+            'currency',
+            'status',
+            'created_at',
+            'customer__id',
+            'customer__name',
+            'customer__email',
+        ).order_by('-created_at')
+
+        # Convert to list
+        booking_list = []
+        for booking in bookings:
+            booking_list.append({
+                'id': str(booking.id),
+                'customer': {
+                    'name': booking.customer.name if booking.customer else '',
+                    'email': booking.customer.email if booking.customer else '',
+                },
+                'totalAmount': float(booking.total_amount or 0),
+                'currency': booking.currency,
+                'status': booking.status,
+                'createdAt': booking.created_at.isoformat() if booking.created_at else None,
+            })
+
+        return Response({
+            'success': True,
+            'message': f'Retrieved {len(booking_list)} bookings for recipe dialog',
+            'data': booking_list,
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error retrieving bookings for recipe: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': 'Error retrieving bookings',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_confirmed_reservations(request):
     """
     Retrieve confirmed bookings where status='confirmed'.
