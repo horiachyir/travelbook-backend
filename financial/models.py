@@ -86,6 +86,16 @@ class Expense(models.Model):
     # Recurrence Information
     recurrence = models.CharField(max_length=20, choices=RECURRENCE_CHOICES, default='once')
 
+    # Parent expense for recurring expenses (links child expenses to original)
+    parent_expense = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='recurring_children',
+        help_text="Parent expense for recurring expense entries"
+    )
+
     # Document Management
     attachment = models.FileField(upload_to='financial/expenses/attachments/', blank=True, null=True, help_text="Attachment file")
 
