@@ -4,7 +4,6 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'expenses', views.ExpenseViewSet, basename='expense')
-router.register(r'accounts', views.FinancialAccountViewSet, basename='financial-account')
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -7,10 +7,11 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from .models import Expense, FinancialAccount, FinancialCategory
-from .serializers import ExpenseSerializer, FinancialAccountSerializer, FinancialCategorySerializer
+from .models import Expense, FinancialCategory
+from .serializers import ExpenseSerializer, FinancialCategorySerializer
 from reservations.models import Booking, BookingPayment
 from commissions.models import Commission
+from settings_app.models import PaymentAccount, ExchangeRate
 
 
 class ExpenseViewSet(viewsets.ModelViewSet):
@@ -93,30 +94,6 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             'variableExpenses': float(variable_expenses),
             'byCategory': by_category
         })
-
-
-class FinancialAccountViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing financial accounts
-    """
-    queryset = FinancialAccount.objects.all()
-    serializer_class = FinancialAccountSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        queryset = FinancialAccount.objects.all()
-
-        # Filter by active status
-        is_active = self.request.query_params.get('isActive', None)
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
-
-        # Filter by currency
-        currency = self.request.query_params.get('currency', None)
-        if currency:
-            queryset = queryset.filter(currency=currency)
-
-        return queryset
 
 
 class FinancialCategoryViewSet(viewsets.ModelViewSet):
@@ -252,20 +229,21 @@ def financial_dashboard(request):
     paid_commissions = commissions.filter(status='paid').aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
 
     # ========== FINANCIAL ACCOUNTS ==========
+    # Get payment accounts from settings_app instead of financial app
+    payment_accounts = PaymentAccount.objects.all()
 
-    accounts = FinancialAccount.objects.filter(is_active=True)
-
-    # Don't filter accounts by currency - show all accounts
-    # But pass the selected currency for conversion
-    accounts_data = FinancialAccountSerializer(
-        accounts,
-        many=True,
-        context={'target_currency': currency_filter}
-    ).data
-
-    # Total balance across all accounts (converted to selected currency)
+    # Calculate balance for each account based on transactions
+    accounts_data = []
     total_balance = Decimal('0')
-    exchange_rates = {
+
+    # Load exchange rates from database
+    # Build a dictionary for quick lookup: {(from_currency, to_currency): rate}
+    db_exchange_rates = {}
+    for rate in ExchangeRate.objects.all():
+        db_exchange_rates[(rate.from_currency, rate.to_currency)] = rate.rate
+
+    # Fallback to hardcoded rates if database is empty
+    default_exchange_rates = {
         'USD': Decimal('1.00'),
         'EUR': Decimal('0.92'),
         'CLP': Decimal('950.00'),
@@ -273,14 +251,68 @@ def financial_dashboard(request):
         'ARS': Decimal('800.00'),
     }
 
-    for account in accounts:
-        if account.currency == currency_filter:
-            total_balance += account.current_balance
-        elif account.currency in exchange_rates and currency_filter in exchange_rates:
-            # Convert to USD first, then to target currency
-            amount_in_usd = account.current_balance / exchange_rates[account.currency]
-            converted_amount = amount_in_usd * exchange_rates[currency_filter]
+    def get_exchange_rate(from_curr, to_curr):
+        """Get exchange rate from database or fallback to defaults"""
+        if from_curr == to_curr:
+            return Decimal('1.00')
+
+        # Try database first
+        if (from_curr, to_curr) in db_exchange_rates:
+            return db_exchange_rates[(from_curr, to_curr)]
+
+        # Fallback: convert through USD
+        if from_curr in default_exchange_rates and to_curr in default_exchange_rates:
+            # Convert from_curr to USD, then USD to to_curr
+            from_to_usd = Decimal('1.00') / default_exchange_rates[from_curr]
+            usd_to_target = default_exchange_rates[to_curr]
+            return from_to_usd * usd_to_target
+
+        return Decimal('1.00')  # Default to 1:1 if no rate found
+
+    for payment_account in payment_accounts:
+        account_name = payment_account.accountName
+        account_currency = payment_account.currency
+
+        # Calculate incoming payments (revenue) for this account
+        # Match by payment method containing account name (case-insensitive)
+        # The account name should match the payment method choices (e.g., "Pagar.me" matches "pagarme-brl")
+        incoming_payments = BookingPayment.objects.filter(
+            status='paid',
+            method__icontains=account_name.replace('.', '').replace(' ', '-').lower()
+        ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+
+        # Calculate outgoing payments (expenses) for this account
+        outgoing_expenses = Expense.objects.filter(
+            payment_status='paid',
+            payment_method__icontains=account_name.replace('.', '').replace(' ', '-').lower()
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        # Calculate current balance (incoming - outgoing)
+        current_balance = incoming_payments - outgoing_expenses
+
+        # Convert balance to selected currency if needed
+        converted_balance = None
+        if account_currency == currency_filter:
+            converted_balance = current_balance
+            total_balance += current_balance
+        else:
+            # Convert using exchange rate
+            exchange_rate = get_exchange_rate(account_currency, currency_filter)
+            converted_amount = current_balance * exchange_rate
+            converted_balance = converted_amount
             total_balance += converted_amount
+
+        # Build account data structure matching frontend expectations
+        accounts_data.append({
+            'id': str(payment_account.id),
+            'name': account_name,
+            'bank_name': account_name.split(' ')[0] if ' ' in account_name else account_name,  # Extract bank name
+            'account_type': 'checking',  # Default type since PaymentAccount doesn't have this field
+            'currency': account_currency,
+            'current_balance': float(current_balance),
+            'converted_balance': float(converted_balance) if converted_balance is not None else None,
+            'is_active': True
+        })
 
     # ========== CASH FLOW ==========
 

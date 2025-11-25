@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Expense, FinancialAccount
+from .models import Expense
 
 
 @admin.register(Expense)
@@ -31,36 +31,6 @@ class ExpenseAdmin(admin.ModelAdmin):
         }),
         ('Approval', {
             'fields': ('requires_approval', 'approved_by', 'approved_at'),
-            'classes': ('collapse',)
-        }),
-        ('Audit', {
-            'fields': ('created_by', 'created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
-
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
-
-
-@admin.register(FinancialAccount)
-class FinancialAccountAdmin(admin.ModelAdmin):
-    list_display = ('name', 'account_type', 'bank_name', 'currency', 'current_balance', 'is_active', 'created_at')
-    list_filter = ('account_type', 'currency', 'is_active')
-    search_fields = ('name', 'bank_name', 'account_number')
-    readonly_fields = ('created_at', 'updated_at', 'created_by')
-
-    fieldsets = (
-        ('Account Information', {
-            'fields': ('name', 'account_type', 'bank_name', 'account_number', 'currency')
-        }),
-        ('Balance', {
-            'fields': ('initial_balance', 'current_balance', 'is_active')
-        }),
-        ('Additional Information', {
-            'fields': ('notes',),
             'classes': ('collapse',)
         }),
         ('Audit', {

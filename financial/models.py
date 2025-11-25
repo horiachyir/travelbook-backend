@@ -142,49 +142,6 @@ class Expense(models.Model):
         return False
 
 
-class FinancialAccount(models.Model):
-    """
-    Model for bank accounts and cash accounts
-    """
-    ACCOUNT_TYPE_CHOICES = [
-        ('checking', 'Checking Account'),
-        ('savings', 'Savings Account'),
-        ('cash', 'Cash'),
-        ('credit-card', 'Credit Card'),
-        ('investment', 'Investment'),
-        ('other', 'Other'),
-    ]
-
-    CURRENCY_CHOICES = [
-        ('CLP', 'Chilean Peso'),
-        ('USD', 'US Dollar'),
-        ('EUR', 'Euro'),
-        ('BRL', 'Brazilian Real'),
-        ('ARS', 'Argentine Peso'),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255, help_text="Account name")
-    account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPE_CHOICES, default='checking')
-    bank_name = models.CharField(max_length=255, blank=True, null=True)
-    account_number = models.CharField(max_length=100, blank=True, null=True, help_text="Last 4 digits or masked number")
-    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='CLP')
-    initial_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    current_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    is_active = models.BooleanField(default=True)
-    notes = models.TextField(blank=True, null=True)
-
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_accounts')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['name']
-
-    def __str__(self):
-        return f"{self.name} ({self.currency} {self.current_balance})"
-
-
 class FinancialCategory(models.Model):
     """
     Model for managing financial categories (expense/income categories)
