@@ -7,8 +7,8 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from .models import Expense, FinancialCategory
-from .serializers import ExpenseSerializer, FinancialCategorySerializer
+from .models import Expense, FinancialCategory, BankTransfer
+from .serializers import ExpenseSerializer, FinancialCategorySerializer, BankTransferSerializer
 from reservations.models import Booking, BookingPayment
 from commissions.models import Commission
 from settings_app.models import PaymentAccount, ExchangeRate
@@ -569,3 +569,288 @@ def payables_list(request):
         })
 
     return Response(data)
+
+
+class BankTransferViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing bank transfers (account-to-account)
+    """
+    queryset = BankTransfer.objects.all()
+    serializer_class = BankTransferSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = BankTransfer.objects.select_related(
+            'source_account', 'destination_account', 'created_by'
+        ).all()
+
+        # For detail actions (retrieve, update, destroy), don't apply filters
+        if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
+            return queryset
+
+        # Filter by source account
+        source_account = self.request.query_params.get('sourceAccount', None)
+        if source_account:
+            queryset = queryset.filter(source_account_id=source_account)
+
+        # Filter by destination account
+        destination_account = self.request.query_params.get('destinationAccount', None)
+        if destination_account:
+            queryset = queryset.filter(destination_account_id=destination_account)
+
+        # Filter by any account (source OR destination)
+        account = self.request.query_params.get('account', None)
+        if account:
+            queryset = queryset.filter(
+                Q(source_account_id=account) | Q(destination_account_id=account)
+            )
+
+        # Filter by date range
+        start_date = self.request.query_params.get('startDate', None)
+        end_date = self.request.query_params.get('endDate', None)
+        if start_date and end_date:
+            queryset = queryset.filter(transfer_date__range=[start_date, end_date])
+
+        # Filter by status
+        status = self.request.query_params.get('status', None)
+        if status:
+            queryset = queryset.filter(status=status)
+
+        # Search term
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(
+                Q(description__icontains=search) |
+                Q(reference_number__icontains=search) |
+                Q(source_account__accountName__icontains=search) |
+                Q(destination_account__accountName__icontains=search)
+            )
+
+        return queryset.order_by('-transfer_date', '-created_at')
+
+    def list(self, request, *args, **kwargs):
+        """Override list to return array directly (not paginated)"""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def bank_statement(request):
+    """
+    Get bank statement data for reconciliation.
+    Returns all settled transactions filtered by bank account and date range.
+    Combines:
+    - Paid expenses (outgoing)
+    - Received payments (incoming)
+    - Bank transfers (incoming/outgoing)
+    """
+    # Get query parameters
+    account_id = request.query_params.get('account', None)
+    start_date_str = request.query_params.get('startDate')
+    end_date_str = request.query_params.get('endDate')
+
+    # Default to current month if no dates provided
+    if not start_date_str or not end_date_str:
+        today = timezone.now().date()
+        start_date = today.replace(day=1)
+        end_date = today
+    else:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+    # Convert dates to datetime for booking payments
+    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+
+    # Initialize response data
+    transactions = []
+    account_data = None
+    account_currency = 'USD'
+
+    # Get account info if specified
+    if account_id:
+        try:
+            payment_account = PaymentAccount.objects.get(id=account_id)
+            account_data = {
+                'id': str(payment_account.id),
+                'name': payment_account.accountName,
+                'currency': payment_account.currency,
+            }
+            account_currency = payment_account.currency
+        except PaymentAccount.DoesNotExist:
+            return Response({'error': 'Account not found'}, status=404)
+
+    # ========== PAID EXPENSES (Outgoing) ==========
+    expenses_query = Expense.objects.filter(
+        payment_date__range=[start_date, end_date]
+    ).select_related('person', 'payment_account', 'created_by')
+
+    if account_id:
+        expenses_query = expenses_query.filter(payment_account_id=account_id)
+
+    for expense in expenses_query:
+        transactions.append({
+            'id': str(expense.id),
+            'type': 'expense',
+            'direction': 'outgoing',
+            'date': expense.payment_date.strftime('%Y-%m-%d'),
+            'description': expense.description or f"{expense.get_category_display()} - {expense.get_expense_type_display()}",
+            'amount': float(expense.amount),
+            'currency': expense.currency,
+            'reference': f"EXP-{str(expense.id)[:8]}",
+            'account_id': str(expense.payment_account.id) if expense.payment_account else None,
+            'account_name': expense.payment_account.accountName if expense.payment_account else None,
+            'category': expense.category,
+            'person_name': expense.person.full_name if expense.person else None,
+            'created_by': expense.created_by.full_name if expense.created_by else None,
+            'status': 'completed',
+        })
+
+    # ========== BOOKING PAYMENTS (Incoming) ==========
+    # Note: Only include payments that are marked as 'paid'
+    payments_query = BookingPayment.objects.filter(
+        date__range=[start_datetime, end_datetime],
+        status='paid'
+    ).select_related('booking', 'booking__customer')
+
+    # Filter by payment method if account specified (match by account name in method)
+    # This is a simplified approach - in production, you'd want a direct FK relationship
+    if account_id and account_data:
+        # Try to match payments by method name
+        account_name_lower = account_data['name'].replace('.', '').replace(' ', '-').lower()
+        payments_query = payments_query.filter(method__icontains=account_name_lower)
+
+    for payment in payments_query:
+        booking = payment.booking
+        transactions.append({
+            'id': str(payment.id),
+            'type': 'payment',
+            'direction': 'incoming',
+            'date': payment.date.strftime('%Y-%m-%d') if payment.date else '',
+            'description': f"Payment from {booking.customer.name if booking.customer else 'N/A'} - Booking #{str(booking.id)[:8]}",
+            'amount': float(payment.amount_paid),
+            'currency': booking.currency,
+            'reference': f"PMT-{str(payment.id)[:8]}",
+            'account_id': account_id,
+            'account_name': account_data['name'] if account_data else None,
+            'category': 'booking_payment',
+            'person_name': booking.customer.name if booking.customer else None,
+            'created_by': None,
+            'status': 'completed',
+            'booking_id': str(booking.id),
+            'method': payment.method,
+        })
+
+    # ========== BANK TRANSFERS ==========
+    # Outgoing transfers (from this account)
+    if account_id:
+        outgoing_transfers = BankTransfer.objects.filter(
+            transfer_date__range=[start_date, end_date],
+            source_account_id=account_id,
+            status='completed'
+        ).select_related('source_account', 'destination_account', 'created_by')
+
+        for transfer in outgoing_transfers:
+            transactions.append({
+                'id': str(transfer.id),
+                'type': 'transfer',
+                'direction': 'outgoing',
+                'date': transfer.transfer_date.strftime('%Y-%m-%d'),
+                'description': transfer.description or f"Transfer to {transfer.destination_account.accountName}",
+                'amount': float(transfer.source_amount),
+                'currency': transfer.source_currency,
+                'reference': transfer.reference_number or f"TRF-{str(transfer.id)[:8]}",
+                'account_id': str(transfer.source_account.id),
+                'account_name': transfer.source_account.accountName,
+                'category': 'transfer',
+                'person_name': None,
+                'created_by': transfer.created_by.full_name if transfer.created_by else None,
+                'status': transfer.status,
+                'destination_account_id': str(transfer.destination_account.id),
+                'destination_account_name': transfer.destination_account.accountName,
+                'exchange_rate': float(transfer.exchange_rate),
+                'destination_amount': float(transfer.destination_amount),
+            })
+
+        # Incoming transfers (to this account)
+        incoming_transfers = BankTransfer.objects.filter(
+            transfer_date__range=[start_date, end_date],
+            destination_account_id=account_id,
+            status='completed'
+        ).select_related('source_account', 'destination_account', 'created_by')
+
+        for transfer in incoming_transfers:
+            transactions.append({
+                'id': str(transfer.id),
+                'type': 'transfer',
+                'direction': 'incoming',
+                'date': transfer.transfer_date.strftime('%Y-%m-%d'),
+                'description': transfer.description or f"Transfer from {transfer.source_account.accountName}",
+                'amount': float(transfer.destination_amount),
+                'currency': transfer.destination_currency,
+                'reference': transfer.reference_number or f"TRF-{str(transfer.id)[:8]}",
+                'account_id': str(transfer.destination_account.id),
+                'account_name': transfer.destination_account.accountName,
+                'category': 'transfer',
+                'person_name': None,
+                'created_by': transfer.created_by.full_name if transfer.created_by else None,
+                'status': transfer.status,
+                'source_account_id': str(transfer.source_account.id),
+                'source_account_name': transfer.source_account.accountName,
+                'exchange_rate': float(transfer.exchange_rate),
+                'source_amount': float(transfer.source_amount),
+            })
+    else:
+        # If no account filter, get all transfers
+        all_transfers = BankTransfer.objects.filter(
+            transfer_date__range=[start_date, end_date],
+            status='completed'
+        ).select_related('source_account', 'destination_account', 'created_by')
+
+        for transfer in all_transfers:
+            # Add as outgoing from source
+            transactions.append({
+                'id': str(transfer.id),
+                'type': 'transfer',
+                'direction': 'outgoing',
+                'date': transfer.transfer_date.strftime('%Y-%m-%d'),
+                'description': transfer.description or f"Transfer: {transfer.source_account.accountName} → {transfer.destination_account.accountName}",
+                'amount': float(transfer.source_amount),
+                'currency': transfer.source_currency,
+                'reference': transfer.reference_number or f"TRF-{str(transfer.id)[:8]}",
+                'account_id': str(transfer.source_account.id),
+                'account_name': transfer.source_account.accountName,
+                'category': 'transfer',
+                'person_name': None,
+                'created_by': transfer.created_by.full_name if transfer.created_by else None,
+                'status': transfer.status,
+                'destination_account_id': str(transfer.destination_account.id),
+                'destination_account_name': transfer.destination_account.accountName,
+                'exchange_rate': float(transfer.exchange_rate),
+                'destination_amount': float(transfer.destination_amount),
+            })
+
+    # Sort transactions by date (newest first)
+    transactions.sort(key=lambda x: x['date'], reverse=True)
+
+    # Calculate summary
+    total_incoming = sum(t['amount'] for t in transactions if t['direction'] == 'incoming')
+    total_outgoing = sum(t['amount'] for t in transactions if t['direction'] == 'outgoing')
+    net_change = total_incoming - total_outgoing
+
+    return Response({
+        'account': account_data,
+        'dateRange': {
+            'startDate': start_date.strftime('%Y-%m-%d'),
+            'endDate': end_date.strftime('%Y-%m-%d'),
+        },
+        'summary': {
+            'totalIncoming': float(total_incoming),
+            'totalOutgoing': float(total_outgoing),
+            'netChange': float(net_change),
+            'transactionCount': len(transactions),
+        },
+        'transactions': transactions,
+    })

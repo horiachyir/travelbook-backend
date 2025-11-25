@@ -139,6 +139,125 @@ class Expense(models.Model):
         return 'pending'
 
 
+class BankTransfer(models.Model):
+    """
+    Model for tracking account-to-account transfers.
+    Used in Bank Statement tab for reconciliation and financial control.
+    """
+    CURRENCY_CHOICES = [
+        ('CLP', 'Chilean Peso'),
+        ('USD', 'US Dollar'),
+        ('EUR', 'Euro'),
+        ('BRL', 'Brazilian Real'),
+        ('ARS', 'Argentine Peso'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Source Account
+    source_account = models.ForeignKey(
+        'settings_app.PaymentAccount',
+        on_delete=models.PROTECT,
+        related_name='outgoing_transfers',
+        help_text="Bank account from which funds are transferred"
+    )
+    source_currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        help_text="Currency of the source account"
+    )
+    source_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Amount withdrawn from source account"
+    )
+
+    # Destination Account
+    destination_account = models.ForeignKey(
+        'settings_app.PaymentAccount',
+        on_delete=models.PROTECT,
+        related_name='incoming_transfers',
+        help_text="Bank account to which funds are transferred"
+    )
+    destination_currency = models.CharField(
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+        help_text="Currency of the destination account"
+    )
+    destination_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Amount deposited to destination account (after conversion)"
+    )
+
+    # Exchange Rate (for cross-currency transfers)
+    exchange_rate = models.DecimalField(
+        max_digits=12,
+        decimal_places=6,
+        default=1.000000,
+        help_text="Exchange rate used (source to destination)"
+    )
+
+    # Transfer Details
+    transfer_date = models.DateField(help_text="Date of the transfer")
+    description = models.TextField(blank=True, null=True, help_text="Description or note for the transfer")
+    reference_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Bank reference or transaction number"
+    )
+
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='completed',
+        help_text="Transfer status"
+    )
+
+    # Document Management
+    receipt = models.FileField(
+        upload_to='financial/transfers/receipts/',
+        blank=True,
+        null=True,
+        help_text="Attached receipt or proof of transfer"
+    )
+
+    # Audit Fields
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_transfers'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-transfer_date', '-created_at']
+        indexes = [
+            models.Index(fields=['transfer_date']),
+            models.Index(fields=['source_account']),
+            models.Index(fields=['destination_account']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Transfer: {self.source_account.accountName} → {self.destination_account.accountName} ({self.source_currency} {self.source_amount})"
+
+    @property
+    def is_cross_currency(self):
+        """Check if this is a cross-currency transfer"""
+        return self.source_currency != self.destination_currency
+
+
 class FinancialCategory(models.Model):
     """
     Model for managing financial categories (expense/income categories)

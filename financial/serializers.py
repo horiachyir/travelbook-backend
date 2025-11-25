@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
-from .models import Expense, FinancialCategory
+from .models import Expense, FinancialCategory, BankTransfer
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
@@ -165,6 +165,102 @@ class FinancialCategorySerializer(serializers.ModelSerializer):
         if obj.created_by:
             return obj.created_by.full_name or obj.created_by.email
         return None
+
+    def create(self, validated_data):
+        # Set created_by from request user
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['created_by'] = request.user
+        return super().create(validated_data)
+
+
+class BankTransferSerializer(serializers.ModelSerializer):
+    """Serializer for BankTransfer model - account-to-account transfers"""
+    created_by_name = serializers.SerializerMethodField()
+    source_account_id = serializers.UUIDField(source='source_account.id', read_only=True)
+    source_account_name = serializers.SerializerMethodField()
+    destination_account_id = serializers.UUIDField(source='destination_account.id', read_only=True)
+    destination_account_name = serializers.SerializerMethodField()
+    is_cross_currency = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = BankTransfer
+        fields = [
+            'id',
+            'source_account', 'source_account_id', 'source_account_name',
+            'source_currency', 'source_amount',
+            'destination_account', 'destination_account_id', 'destination_account_name',
+            'destination_currency', 'destination_amount',
+            'exchange_rate',
+            'transfer_date', 'description', 'reference_number',
+            'status',
+            'receipt',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'is_cross_currency'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'updated_at',
+            'source_account_id', 'source_account_name',
+            'destination_account_id', 'destination_account_name',
+            'is_cross_currency'
+        ]
+        extra_kwargs = {
+            'description': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'reference_number': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'receipt': {'required': False, 'allow_null': True},
+        }
+
+    def get_created_by_name(self, obj):
+        """Get the name of the creator"""
+        if obj.created_by:
+            return obj.created_by.full_name or obj.created_by.email
+        return None
+
+    def get_source_account_name(self, obj):
+        """Get the name of the source account"""
+        if obj.source_account:
+            return obj.source_account.accountName
+        return None
+
+    def get_destination_account_name(self, obj):
+        """Get the name of the destination account"""
+        if obj.destination_account:
+            return obj.destination_account.accountName
+        return None
+
+    def validate(self, data):
+        """Validate transfer data"""
+        source_account = data.get('source_account')
+        destination_account = data.get('destination_account')
+
+        # Ensure source and destination are different
+        if source_account and destination_account and source_account == destination_account:
+            raise serializers.ValidationError({
+                'destination_account': 'Source and destination accounts must be different.'
+            })
+
+        # Validate amounts are positive
+        source_amount = data.get('source_amount')
+        destination_amount = data.get('destination_amount')
+
+        if source_amount and source_amount <= 0:
+            raise serializers.ValidationError({
+                'source_amount': 'Amount must be greater than zero.'
+            })
+
+        if destination_amount and destination_amount <= 0:
+            raise serializers.ValidationError({
+                'destination_amount': 'Amount must be greater than zero.'
+            })
+
+        # Validate exchange rate is positive
+        exchange_rate = data.get('exchange_rate')
+        if exchange_rate and exchange_rate <= 0:
+            raise serializers.ValidationError({
+                'exchange_rate': 'Exchange rate must be greater than zero.'
+            })
+
+        return data
 
     def create(self, validated_data):
         # Set created_by from request user
