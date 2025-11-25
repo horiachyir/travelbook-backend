@@ -191,7 +191,7 @@ class BookingTour(models.Model):
 
 
 class BookingPayment(models.Model):
-    """Payment details for a booking"""
+    """Payment details for a booking (Recipe)"""
     PAYMENT_METHOD_CHOICES = [
         ('pagarme-brl', 'Pagar.me (BRL)'),
         ('sicred-pix-brl', 'Sicred – Pix (BRL)'),
@@ -206,7 +206,7 @@ class BookingPayment(models.Model):
         ('wise-clp', 'Wise (CLP)'),
         ('mercado-pago-ar', 'Mercado Pago (AR)'),
     ]
-    
+
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('partial', 'Partial'),
@@ -214,32 +214,45 @@ class BookingPayment(models.Model):
         ('overdue', 'Overdue'),
         ('refunded', 'Refunded'),
     ]
-    
+
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='payment_details')
-    date = models.DateTimeField()
+    date = models.DateTimeField()  # Payment date
+    due_date = models.DateTimeField(null=True, blank=True)  # Due date for this payment/installment
     method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES)
-    percentage = models.DecimalField(max_digits=5, decimal_places=2)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, default=100)
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2)
-    comments = models.TextField(blank=True)
+
+    # Installment fields
+    installment = models.PositiveIntegerField(default=1)  # Current installment number (1, 2, 3, etc.)
+    total_installments = models.PositiveIntegerField(default=1)  # Total number of installments (1x, 2x, 3x, etc.)
+
+    # Description and notes (renamed from comments)
+    description = models.TextField(blank=True)  # Description field
+    notes = models.TextField(blank=True)  # Notes field
+    comments = models.TextField(blank=True)  # Keep for backward compatibility
+
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
-    receipt_file = models.FileField(upload_to='receipts/', blank=True, null=True)
-    
+    receipt_file = models.FileField(upload_to='receipts/', blank=True, null=True)  # Attachment field
+
     # Booking options
     copy_comments = models.BooleanField(default=True)
     include_payment = models.BooleanField(default=True)
     quote_comments = models.TextField(blank=True)
     send_purchase_order = models.BooleanField(default=True)
     send_quotation_access = models.BooleanField(default=True)
-    
+
     # User tracking
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_booking_payments')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = 'booking_payments'
-    
+        ordering = ['due_date', 'installment']
+
     def __str__(self):
+        if self.total_installments > 1:
+            return f"Payment {self.installment}/{self.total_installments} for {self.booking.id} - {self.status}"
         return f"Payment for {self.booking.id} - {self.status}"
 
 

@@ -489,16 +489,19 @@ def create_booking_payment_for_booking(request, booking_id):
     """
     Handle POST /api/bookings/{booking_id}/payments/ requests.
 
-    Create a new payment for a specific booking.
+    Create a new payment (recipe) for a specific booking.
 
-    Expected data structure (simplified from invoice form):
+    Expected data structure (from Create New Recipe form):
     {
-        "date": "2025-11-14",
+        "date": "2025-11-14",           # Payment date
+        "due_date": "2025-12-14",       # Due date for this installment
         "method": "bank-transfer",
-        "percentage": 100,
-        "amount_paid": 1500.00,
+        "installment": 1,               # Current installment number (1, 2, 3, etc.)
+        "total_installments": 3,        # Total installments (1x, 2x, 3x, 4x, 5x)
+        "amount_paid": 500.00,          # Amount for this installment
         "status": "pending",
-        "comments": "Payment for invoice",
+        "description": "Payment description",
+        "notes": "Additional notes",
         "copy_comments": true,
         "include_payment": true,
         "quote_comments": "",
@@ -521,23 +524,34 @@ def create_booking_payment_for_booking(request, booking_id):
         # Create the booking payment record
         try:
             with transaction.atomic():
-                # Parse and make date timezone-aware if it's provided as a string
+                # Parse and make payment date timezone-aware
                 payment_date = data.get('date')
                 if payment_date and isinstance(payment_date, str):
-                    # Parse string date and make it timezone-aware
                     naive_date = datetime.strptime(payment_date, '%Y-%m-%d')
                     payment_date = timezone.make_aware(naive_date)
                 elif payment_date and not timezone.is_aware(payment_date):
-                    # If it's a naive datetime, make it aware
                     payment_date = timezone.make_aware(payment_date)
+
+                # Parse and make due date timezone-aware
+                due_date = data.get('due_date')
+                if due_date and isinstance(due_date, str):
+                    naive_due_date = datetime.strptime(due_date, '%Y-%m-%d')
+                    due_date = timezone.make_aware(naive_due_date)
+                elif due_date and not timezone.is_aware(due_date):
+                    due_date = timezone.make_aware(due_date)
 
                 booking_payment = BookingPayment.objects.create(
                     booking=booking,
                     date=payment_date,
+                    due_date=due_date,
                     method=data.get('method'),
                     percentage=data.get('percentage', 100),
                     amount_paid=data.get('amount_paid'),
-                    comments=data.get('comments', ''),
+                    installment=data.get('installment', 1),
+                    total_installments=data.get('total_installments', 1),
+                    description=data.get('description', ''),
+                    notes=data.get('notes', ''),
+                    comments=data.get('comments', ''),  # Keep for backward compatibility
                     status=data.get('status', 'pending'),
                     receipt_file=data.get('receipt_file'),
                     copy_comments=data.get('copy_comments', True),
@@ -548,9 +562,15 @@ def create_booking_payment_for_booking(request, booking_id):
                     created_by=request.user
                 )
 
+                # Build response message
+                if booking_payment.total_installments > 1:
+                    message = f'Installment {booking_payment.installment}/{booking_payment.total_installments} created successfully'
+                else:
+                    message = 'Recipe created successfully'
+
                 return Response({
                     'success': True,
-                    'message': 'Payment created successfully',
+                    'message': message,
                     'data': {
                         'payment_id': booking_payment.id,
                         'booking_id': str(booking.id),
@@ -558,6 +578,11 @@ def create_booking_payment_for_booking(request, booking_id):
                         'method': booking_payment.method,
                         'status': booking_payment.status,
                         'date': booking_payment.date,
+                        'due_date': booking_payment.due_date,
+                        'installment': booking_payment.installment,
+                        'total_installments': booking_payment.total_installments,
+                        'description': booking_payment.description,
+                        'notes': booking_payment.notes,
                         'created_at': booking_payment.created_at
                     }
                 }, status=status.HTTP_201_CREATED)
@@ -566,15 +591,15 @@ def create_booking_payment_for_booking(request, booking_id):
             logger.error(f"Error creating booking payment: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Error creating payment',
+                'message': 'Error creating recipe',
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     except Exception as e:
-        logger.error(f"Error processing payment request: {str(e)}")
+        logger.error(f"Error processing recipe request: {str(e)}")
         return Response({
             'success': False,
-            'message': 'Internal server error occurred while processing payment',
+            'message': 'Internal server error occurred while processing recipe',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1103,8 +1128,11 @@ def get_confirmed_reservations(request):
 
     Returns the same data structure as GET /api/booking/ but filtered for confirmed bookings only.
     """
+    from django.db.models import Prefetch
+
     try:
         # Get all confirmed bookings with related data using select_related and prefetch_related for optimization
+        # Use Prefetch object with queryset to avoid N+1 queries when ordering
         bookings = Booking.objects.select_related(
             'customer',           # Join customers table via customer_id
             'sales_person',       # Join users table via sales_person_id
@@ -1115,7 +1143,10 @@ def get_confirmed_reservations(request):
             'booking_tours__created_by',     # Join users table for tour creator
             'booking_tours__main_driver',    # Join users table for main driver
             'booking_tours__main_guide',     # Join users table for main guide
-            'payment_details__created_by'    # Join users table for payment creator
+            Prefetch(
+                'payment_details',
+                queryset=BookingPayment.objects.select_related('created_by').order_by('-created_at')
+            )
         ).filter(status='confirmed').order_by('-created_at')
 
         booking_data = []
@@ -1152,9 +1183,11 @@ def get_confirmed_reservations(request):
                 tours_data.append(serialize_booking_tour(booking_tour))
 
             # 3. Payment details from booking_payments table (via booking_id FK)
+            # Use the prefetched and pre-ordered queryset (no additional query)
             payments_data = []
+            prefetched_payments = list(booking.payment_details.all())
 
-            for payment in booking.payment_details.all().order_by('-created_at'):
+            for payment in prefetched_payments:
                 payments_data.append({
                     'id': payment.id,
                     'date': payment.date,
@@ -1171,17 +1204,8 @@ def get_confirmed_reservations(request):
                     'sendQuotationAccess': payment.send_quotation_access,
                 })
 
-            # Get most recent payment for paymentDetails field
+            # Get most recent payment for paymentDetails field (already sorted by -created_at)
             payment_details_data = payments_data[0] if payments_data else None
-
-            # Debug: Log sales_person data
-            if booking.sales_person:
-                logger.info(f"Sales person data for booking {booking.id}: "
-                           f"full_name={booking.sales_person.full_name}, "
-                           f"email={booking.sales_person.email}, "
-                           f"phone={booking.sales_person.phone}")
-            else:
-                logger.info(f"No sales person for booking {booking.id}")
 
             # Compile complete booking data in the required format
             booking_item = {
