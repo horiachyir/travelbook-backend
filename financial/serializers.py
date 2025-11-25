@@ -5,21 +5,24 @@ from .models import Expense, FinancialCategory
 class ExpenseSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     approved_by_name = serializers.SerializerMethodField()
+    person_name = serializers.SerializerMethodField()
+    person_id = serializers.UUIDField(source='person.id', read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Expense
         fields = [
-            'id', 'name', 'expense_type', 'category', 'description',
+            'id', 'name', 'expense_type', 'cost_type', 'category', 'description',
             'amount', 'currency', 'payment_status', 'payment_method',
             'payment_date', 'due_date', 'recurrence', 'recurrence_end_date',
             'vendor', 'vendor_id_number', 'invoice_number', 'receipt_file',
+            'attachment', 'person', 'person_id', 'person_name',
             'department', 'notes', 'reference', 'requires_approval',
             'approved_by', 'approved_by_name', 'approved_at',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
             'is_overdue'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'person_id', 'person_name']
 
     def get_created_by_name(self, obj):
         """Get the name of the creator"""
@@ -31,6 +34,12 @@ class ExpenseSerializer(serializers.ModelSerializer):
         """Get the name of the approver"""
         if obj.approved_by:
             return obj.approved_by.full_name or obj.approved_by.email
+        return None
+
+    def get_person_name(self, obj):
+        """Get the name of the associated person"""
+        if obj.person:
+            return obj.person.full_name or obj.person.email
         return None
 
     def create(self, validated_data):

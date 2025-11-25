@@ -100,11 +100,15 @@ class Expense(models.Model):
     vendor = models.CharField(max_length=255, blank=True, null=True, help_text="Vendor or supplier name")
     vendor_id_number = models.CharField(max_length=100, blank=True, null=True, help_text="Vendor ID or tax number")
 
+    # Person/User associated with expense
+    person = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='person_expenses', help_text="Person/User associated with this expense")
+
     # Document Management
     invoice_number = models.CharField(max_length=100, blank=True, null=True, help_text="Invoice or receipt number")
     receipt_file = models.FileField(upload_to='financial/expenses/', blank=True, null=True)
+    attachment = models.FileField(upload_to='financial/expenses/attachments/', blank=True, null=True, help_text="Attachment file")
 
-    # Department/Cost Center
+    # Department/Cost Center (legacy - can be removed in future)
     department = models.CharField(max_length=100, blank=True, null=True, help_text="Department or cost center")
 
     # Notes and References
