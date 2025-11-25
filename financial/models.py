@@ -9,6 +9,9 @@ class Expense(models.Model):
     EXPENSE_TYPE_CHOICES = [
         ('fixed', 'Fixed'),
         ('variable', 'Variable'),
+        ('fc', 'Fixed Cost (FC)'),
+        ('ivc', 'Indirect Variable Cost (IVC)'),
+        ('dvc', 'Direct Variable Cost (DVC)'),
     ]
 
     COST_TYPE_CHOICES = [
@@ -76,8 +79,8 @@ class Expense(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Basic Information
-    name = models.CharField(max_length=255, help_text="Expense name/description")
-    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default='variable')
+    name = models.CharField(max_length=255, blank=True, null=True, help_text="Expense name/description (optional)")
+    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default='fc')
     cost_type = models.CharField(max_length=10, choices=COST_TYPE_CHOICES, default='fc', help_text="Cost classification: FC, IVC, or DVC")
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
     description = models.TextField(blank=True, null=True, help_text="Detailed description")

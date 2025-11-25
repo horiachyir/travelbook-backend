@@ -23,6 +23,18 @@ class ExpenseSerializer(serializers.ModelSerializer):
             'is_overdue'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'is_overdue', 'person_id', 'person_name']
+        extra_kwargs = {
+            'name': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'attachment': {'required': False, 'allow_null': True},
+            'person': {'required': False, 'allow_null': True},
+            'payment_date': {'required': False, 'allow_null': True},
+            'description': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'notes': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'payment_method': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'vendor': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'department': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'reference': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
 
     def get_created_by_name(self, obj):
         """Get the name of the creator"""
