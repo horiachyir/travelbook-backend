@@ -88,6 +88,42 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
         return expense
 
+    def update(self, instance, validated_data):
+        """
+        Update expense with special handling for salary category.
+        When a salary expense is updated, propagate the amount and currency
+        to all future expenses in the same recurring series for the same person.
+        """
+        request = self.context.get('request')
+        propagate_salary = request.data.get('propagate_salary', False) if request else False
+
+        category = validated_data.get('category', instance.category)
+        new_amount = validated_data.get('amount', instance.amount)
+        new_currency = validated_data.get('currency', instance.currency)
+        person = validated_data.get('person', instance.person)
+
+        # Update the current expense
+        updated_expense = super().update(instance, validated_data)
+
+        # If this is a salary expense and propagation is requested
+        if category == 'salary' and propagate_salary:
+            base_date = updated_expense.due_date
+
+            # Update all future salary expenses for the same person
+            future_salary_expenses = Expense.objects.filter(
+                person=person,
+                category='salary',
+                due_date__gt=base_date
+            )
+
+            # Update amount and currency for all future salary expenses
+            future_salary_expenses.update(
+                amount=new_amount,
+                currency=new_currency
+            )
+
+        return updated_expense
+
     def _generate_recurring_expenses(self, parent_expense, validated_data):
         """
         Generate future recurring expense entries based on recurrence pattern.
