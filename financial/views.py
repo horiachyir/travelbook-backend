@@ -870,13 +870,15 @@ def income_statement(request):
 
     Cash Basis: Only considers money that actually entered/left accounts (paid transactions)
     Accrual Basis: Considers revenue/expenses when they occur (regardless of payment status)
+
+    All amounts are converted to the target currency using exchange rates.
     """
     # Get query parameters
     start_date_str = request.query_params.get('startDate')
     end_date_str = request.query_params.get('endDate')
     period_type = request.query_params.get('periodType', 'monthly')  # 'monthly' or 'annual'
     basis = request.query_params.get('basis', 'accrual')  # 'cash' or 'accrual'
-    currency_filter = request.query_params.get('currency', 'USD')
+    target_currency = request.query_params.get('currency', 'BRL')  # Target currency for display
 
     # Default to current year if no dates provided
     today = timezone.now().date()
@@ -887,12 +889,41 @@ def income_statement(request):
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
 
-    # Convert dates to timezone-aware datetimes
-    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
-    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+    # Load exchange rates for currency conversion
+    db_exchange_rates = {}
+    for rate in ExchangeRate.objects.all():
+        db_exchange_rates[(rate.from_currency, rate.to_currency)] = rate.rate
+
+    default_exchange_rates = {
+        'USD': Decimal('1.00'),
+        'EUR': Decimal('0.92'),
+        'CLP': Decimal('950.00'),
+        'BRL': Decimal('5.00'),
+        'ARS': Decimal('800.00'),
+    }
+
+    def get_exchange_rate(from_curr, to_curr):
+        """Get exchange rate from database or fallback to defaults"""
+        if from_curr == to_curr:
+            return Decimal('1.00')
+        if (from_curr, to_curr) in db_exchange_rates:
+            return db_exchange_rates[(from_curr, to_curr)]
+        # Fallback: convert through USD
+        if from_curr in default_exchange_rates and to_curr in default_exchange_rates:
+            from_to_usd = Decimal('1.00') / default_exchange_rates[from_curr]
+            usd_to_target = default_exchange_rates[to_curr]
+            return from_to_usd * usd_to_target
+        return Decimal('1.00')
+
+    def convert_amount(amount, from_curr, to_curr):
+        """Convert amount from one currency to another"""
+        if from_curr == to_curr:
+            return amount
+        rate = get_exchange_rate(from_curr, to_curr)
+        return amount * rate
 
     def get_period_data(period_start, period_end):
-        """Calculate P&L data for a specific period"""
+        """Calculate P&L data for a specific period with currency conversion"""
         period_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
         period_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
 
@@ -902,71 +933,94 @@ def income_statement(request):
             payments = BookingPayment.objects.filter(
                 date__range=[period_start_dt, period_end_dt],
                 status='paid'
-            )
+            ).select_related('booking')
         else:
             # Accrual basis: All payments in period (when service occurs)
             payments = BookingPayment.objects.filter(
                 date__range=[period_start_dt, period_end_dt]
-            )
+            ).select_related('booking')
 
-        # Filter by currency
-        if currency_filter and currency_filter != 'ALL':
-            booking_ids = Booking.objects.filter(currency=currency_filter).values_list('id', flat=True)
-            payments = payments.filter(booking_id__in=booking_ids)
+        # Calculate revenue with currency conversion
+        total_revenue = Decimal('0')
+        revenue_by_method_dict = {}
 
-        total_revenue = payments.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+        for payment in payments:
+            booking_currency = payment.booking.currency if payment.booking else target_currency
+            converted_amount = convert_amount(payment.amount_paid, booking_currency, target_currency)
+            total_revenue += converted_amount
 
-        # Revenue breakdown by payment method
-        revenue_by_method = list(payments.values('method').annotate(
-            total=Sum('amount_paid'),
-            count=Count('id')
-        ).order_by('-total'))
+            method = payment.method or 'unknown'
+            if method not in revenue_by_method_dict:
+                revenue_by_method_dict[method] = {'method': method, 'total': Decimal('0'), 'count': 0}
+            revenue_by_method_dict[method]['total'] += converted_amount
+            revenue_by_method_dict[method]['count'] += 1
+
+        revenue_by_method = [
+            {'method': v['method'], 'total': float(v['total']), 'count': v['count']}
+            for v in sorted(revenue_by_method_dict.values(), key=lambda x: x['total'], reverse=True)
+        ]
 
         # ========== EXPENSES ==========
         if basis == 'cash':
             # Cash basis: Only paid expenses (has payment_date within period)
-            expenses = Expense.objects.filter(
+            expenses_qs = Expense.objects.filter(
                 payment_date__range=[period_start, period_end]
             )
         else:
             # Accrual basis: Expenses by due_date (when expense occurs)
-            expenses = Expense.objects.filter(
+            expenses_qs = Expense.objects.filter(
                 due_date__range=[period_start, period_end]
             )
 
-        if currency_filter and currency_filter != 'ALL':
-            expenses = expenses.filter(currency=currency_filter)
+        # Calculate expenses with currency conversion
+        total_expenses = Decimal('0')
+        fc_expenses = Decimal('0')
+        ivc_expenses = Decimal('0')
+        dvc_expenses = Decimal('0')
+        expenses_by_category_dict = {}
 
-        total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        for expense in expenses_qs:
+            converted_amount = convert_amount(expense.amount, expense.currency, target_currency)
+            total_expenses += converted_amount
 
-        # Expenses by category
-        expenses_by_category = list(expenses.values('category').annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        ).order_by('-total'))
+            # By cost type
+            if expense.cost_type == 'fc':
+                fc_expenses += converted_amount
+            elif expense.cost_type == 'ivc':
+                ivc_expenses += converted_amount
+            elif expense.cost_type == 'dvc':
+                dvc_expenses += converted_amount
 
-        # Expenses by cost type (FC, IVC, DVC)
-        fc_expenses = expenses.filter(cost_type='fc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        ivc_expenses = expenses.filter(cost_type='ivc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        dvc_expenses = expenses.filter(cost_type='dvc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            # By category
+            category = expense.category or 'other'
+            if category not in expenses_by_category_dict:
+                expenses_by_category_dict[category] = {'category': category, 'total': Decimal('0'), 'count': 0}
+            expenses_by_category_dict[category]['total'] += converted_amount
+            expenses_by_category_dict[category]['count'] += 1
+
+        expenses_by_category = [
+            {'category': v['category'], 'total': float(v['total']), 'count': v['count']}
+            for v in sorted(expenses_by_category_dict.values(), key=lambda x: x['total'], reverse=True)
+        ]
 
         # ========== COMMISSIONS ==========
         if basis == 'cash':
             # Cash basis: Only paid commissions
-            commissions = Commission.objects.filter(
+            commissions_qs = Commission.objects.filter(
                 created_at__range=[period_start_dt, period_end_dt],
                 status='paid'
             )
         else:
             # Accrual basis: All commissions when they occur
-            commissions = Commission.objects.filter(
+            commissions_qs = Commission.objects.filter(
                 created_at__range=[period_start_dt, period_end_dt]
             )
 
-        if currency_filter and currency_filter != 'ALL':
-            commissions = commissions.filter(currency=currency_filter)
-
-        total_commissions = commissions.aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
+        # Calculate commissions with currency conversion
+        total_commissions = Decimal('0')
+        for commission in commissions_qs:
+            converted_amount = convert_amount(commission.commission_amount, commission.currency, target_currency)
+            total_commissions += converted_amount
 
         # ========== CALCULATE P&L ==========
         gross_profit = total_revenue - dvc_expenses
@@ -1054,7 +1108,7 @@ def income_statement(request):
         'reportType': 'Income Statement',
         'periodType': period_type,
         'basis': basis,
-        'currency': currency_filter,
+        'currency': target_currency,
         'dateRange': {
             'startDate': start_date.strftime('%Y-%m-%d'),
             'endDate': end_date.strftime('%Y-%m-%d')
