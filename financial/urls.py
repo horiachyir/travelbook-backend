@@ -12,4 +12,6 @@ urlpatterns = [
     path('receivables/', views.receivables_list, name='receivables-list'),
     path('payables/', views.payables_list, name='payables-list'),
     path('bank-statement/', views.bank_statement, name='bank-statement'),
+    path('reports/income-statement/', views.income_statement, name='income-statement'),
+    path('reports/cash-flow/', views.cash_flow_statement, name='cash-flow-statement'),
 ]

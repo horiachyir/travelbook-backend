@@ -6,6 +6,8 @@ from django.db.models import Sum, Q, Count
 from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
+from dateutil.relativedelta import relativedelta
+from calendar import monthrange
 
 from .models import Expense, FinancialCategory, BankTransfer
 from .serializers import ExpenseSerializer, FinancialCategorySerializer, BankTransferSerializer
@@ -853,4 +855,546 @@ def bank_statement(request):
             'transactionCount': len(transactions),
         },
         'transactions': transactions,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def income_statement(request):
+    """
+    Generate Income Statement (P&L / DRE) report.
+
+    Supports:
+    - Monthly or Annual view (period_type: 'monthly' or 'annual')
+    - Cash Basis or Accrual Basis (basis: 'cash' or 'accrual')
+
+    Cash Basis: Only considers money that actually entered/left accounts (paid transactions)
+    Accrual Basis: Considers revenue/expenses when they occur (regardless of payment status)
+    """
+    # Get query parameters
+    start_date_str = request.query_params.get('startDate')
+    end_date_str = request.query_params.get('endDate')
+    period_type = request.query_params.get('periodType', 'monthly')  # 'monthly' or 'annual'
+    basis = request.query_params.get('basis', 'accrual')  # 'cash' or 'accrual'
+    currency_filter = request.query_params.get('currency', 'USD')
+
+    # Default to current year if no dates provided
+    today = timezone.now().date()
+    if not start_date_str or not end_date_str:
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    else:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+    # Convert dates to timezone-aware datetimes
+    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+
+    def get_period_data(period_start, period_end):
+        """Calculate P&L data for a specific period"""
+        period_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
+        period_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
+
+        # ========== REVENUE ==========
+        if basis == 'cash':
+            # Cash basis: Only paid payments
+            payments = BookingPayment.objects.filter(
+                date__range=[period_start_dt, period_end_dt],
+                status='paid'
+            )
+        else:
+            # Accrual basis: All payments in period (when service occurs)
+            payments = BookingPayment.objects.filter(
+                date__range=[period_start_dt, period_end_dt]
+            )
+
+        # Filter by currency
+        if currency_filter and currency_filter != 'ALL':
+            booking_ids = Booking.objects.filter(currency=currency_filter).values_list('id', flat=True)
+            payments = payments.filter(booking_id__in=booking_ids)
+
+        total_revenue = payments.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+
+        # Revenue breakdown by payment method
+        revenue_by_method = list(payments.values('method').annotate(
+            total=Sum('amount_paid'),
+            count=Count('id')
+        ).order_by('-total'))
+
+        # ========== EXPENSES ==========
+        if basis == 'cash':
+            # Cash basis: Only paid expenses (has payment_date within period)
+            expenses = Expense.objects.filter(
+                payment_date__range=[period_start, period_end]
+            )
+        else:
+            # Accrual basis: Expenses by due_date (when expense occurs)
+            expenses = Expense.objects.filter(
+                due_date__range=[period_start, period_end]
+            )
+
+        if currency_filter and currency_filter != 'ALL':
+            expenses = expenses.filter(currency=currency_filter)
+
+        total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        # Expenses by category
+        expenses_by_category = list(expenses.values('category').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total'))
+
+        # Expenses by cost type (FC, IVC, DVC)
+        fc_expenses = expenses.filter(cost_type='fc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        ivc_expenses = expenses.filter(cost_type='ivc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        dvc_expenses = expenses.filter(cost_type='dvc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        # ========== COMMISSIONS ==========
+        if basis == 'cash':
+            # Cash basis: Only paid commissions
+            commissions = Commission.objects.filter(
+                created_at__range=[period_start_dt, period_end_dt],
+                status='paid'
+            )
+        else:
+            # Accrual basis: All commissions when they occur
+            commissions = Commission.objects.filter(
+                created_at__range=[period_start_dt, period_end_dt]
+            )
+
+        if currency_filter and currency_filter != 'ALL':
+            commissions = commissions.filter(currency=currency_filter)
+
+        total_commissions = commissions.aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
+
+        # ========== CALCULATE P&L ==========
+        gross_profit = total_revenue - dvc_expenses
+        operating_expenses = fc_expenses + ivc_expenses + total_commissions
+        operating_income = gross_profit - operating_expenses
+        net_income = total_revenue - total_expenses - total_commissions
+
+        return {
+            'revenue': {
+                'total': float(total_revenue),
+                'byMethod': revenue_by_method
+            },
+            'costOfSales': {
+                'total': float(dvc_expenses),
+                'directVariableCosts': float(dvc_expenses)
+            },
+            'grossProfit': float(gross_profit),
+            'operatingExpenses': {
+                'total': float(operating_expenses),
+                'fixedCosts': float(fc_expenses),
+                'indirectVariableCosts': float(ivc_expenses),
+                'commissions': float(total_commissions),
+                'byCategory': expenses_by_category
+            },
+            'operatingIncome': float(operating_income),
+            'expenses': {
+                'total': float(total_expenses),
+                'byCategory': expenses_by_category
+            },
+            'commissions': {
+                'total': float(total_commissions)
+            },
+            'netIncome': float(net_income),
+            'profitMargin': float((net_income / total_revenue * 100) if total_revenue > 0 else 0)
+        }
+
+    # Generate period-by-period data
+    periods = []
+
+    if period_type == 'monthly':
+        # Monthly breakdown
+        current_date = start_date.replace(day=1)
+        while current_date <= end_date:
+            # Get last day of month
+            _, last_day = monthrange(current_date.year, current_date.month)
+            period_end = current_date.replace(day=last_day)
+            if period_end > end_date:
+                period_end = end_date
+
+            period_data = get_period_data(current_date, period_end)
+            period_data['period'] = current_date.strftime('%Y-%m')
+            period_data['periodLabel'] = current_date.strftime('%B %Y')
+            period_data['startDate'] = current_date.strftime('%Y-%m-%d')
+            period_data['endDate'] = period_end.strftime('%Y-%m-%d')
+            periods.append(period_data)
+
+            # Move to next month
+            current_date = (current_date + relativedelta(months=1)).replace(day=1)
+    else:
+        # Annual breakdown (by year)
+        current_year = start_date.year
+        while current_year <= end_date.year:
+            year_start = datetime(current_year, 1, 1).date()
+            year_end = datetime(current_year, 12, 31).date()
+
+            # Adjust for actual date range
+            if year_start < start_date:
+                year_start = start_date
+            if year_end > end_date:
+                year_end = end_date
+
+            period_data = get_period_data(year_start, year_end)
+            period_data['period'] = str(current_year)
+            period_data['periodLabel'] = str(current_year)
+            period_data['startDate'] = year_start.strftime('%Y-%m-%d')
+            period_data['endDate'] = year_end.strftime('%Y-%m-%d')
+            periods.append(period_data)
+
+            current_year += 1
+
+    # Calculate totals across all periods
+    totals = get_period_data(start_date, end_date)
+
+    return Response({
+        'reportType': 'Income Statement',
+        'periodType': period_type,
+        'basis': basis,
+        'currency': currency_filter,
+        'dateRange': {
+            'startDate': start_date.strftime('%Y-%m-%d'),
+            'endDate': end_date.strftime('%Y-%m-%d')
+        },
+        'periods': periods,
+        'totals': totals
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def cash_flow_statement(request):
+    """
+    Generate Cash Flow Statement report.
+
+    Shows all cash inflows and outflows on a daily, weekly, or monthly basis.
+    Provides:
+    - Opening balance
+    - Planned inflows
+    - Planned outflows
+    - Closing balance
+    - Future projections
+    """
+    # Get query parameters
+    start_date_str = request.query_params.get('startDate')
+    end_date_str = request.query_params.get('endDate')
+    period_type = request.query_params.get('periodType', 'daily')  # 'daily', 'weekly', 'monthly'
+    currency_filter = request.query_params.get('currency', 'USD')
+    include_projections = request.query_params.get('includeProjections', 'true').lower() == 'true'
+
+    # Default to current month if no dates provided
+    today = timezone.now().date()
+    if not start_date_str or not end_date_str:
+        start_date = today.replace(day=1)
+        end_date = today + timedelta(days=30)  # Include 30 days of projections
+    else:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+    # Load exchange rates
+    db_exchange_rates = {}
+    for rate in ExchangeRate.objects.all():
+        db_exchange_rates[(rate.from_currency, rate.to_currency)] = rate.rate
+
+    default_exchange_rates = {
+        'USD': Decimal('1.00'),
+        'EUR': Decimal('0.92'),
+        'CLP': Decimal('950.00'),
+        'BRL': Decimal('5.00'),
+        'ARS': Decimal('800.00'),
+    }
+
+    def get_exchange_rate(from_curr, to_curr):
+        if from_curr == to_curr:
+            return Decimal('1.00')
+        if (from_curr, to_curr) in db_exchange_rates:
+            return db_exchange_rates[(from_curr, to_curr)]
+        if from_curr in default_exchange_rates and to_curr in default_exchange_rates:
+            from_to_usd = Decimal('1.00') / default_exchange_rates[from_curr]
+            usd_to_target = default_exchange_rates[to_curr]
+            return from_to_usd * usd_to_target
+        return Decimal('1.00')
+
+    def convert_amount(amount, from_curr, to_curr):
+        if from_curr == to_curr:
+            return amount
+        rate = get_exchange_rate(from_curr, to_curr)
+        return amount * rate
+
+    # Calculate opening balance from bank accounts
+    opening_balance = Decimal('0')
+    for account in PaymentAccount.objects.all():
+        # Get payments received before start_date
+        payments_before = BookingPayment.objects.filter(
+            date__lt=timezone.make_aware(datetime.combine(start_date, datetime.min.time())),
+            status='paid'
+        )
+
+        # Get expenses paid before start_date
+        expenses_before = Expense.objects.filter(
+            payment_date__lt=start_date,
+            payment_account=account
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        account_payments = payments_before.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+
+        # Convert to target currency
+        account_balance = convert_amount(account_payments - expenses_before, account.currency, currency_filter)
+        opening_balance += account_balance
+
+    # Generate period data
+    def get_period_boundaries(period_start, period_type_inner):
+        """Get start and end dates for a period"""
+        if period_type_inner == 'daily':
+            return period_start, period_start
+        elif period_type_inner == 'weekly':
+            # Week starts on Monday
+            week_start = period_start - timedelta(days=period_start.weekday())
+            week_end = week_start + timedelta(days=6)
+            return week_start, week_end
+        else:  # monthly
+            month_start = period_start.replace(day=1)
+            _, last_day = monthrange(period_start.year, period_start.month)
+            month_end = period_start.replace(day=last_day)
+            return month_start, month_end
+
+    def get_period_cash_flow(period_start, period_end):
+        """Calculate cash flow for a specific period"""
+        period_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
+        period_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
+
+        is_future = period_start > today
+
+        # ========== INFLOWS ==========
+        inflows = []
+        total_inflows = Decimal('0')
+
+        # Booking payments (received or expected)
+        if is_future:
+            # Future: Use scheduled payments (pending)
+            payments = BookingPayment.objects.filter(
+                date__range=[period_start_dt, period_end_dt],
+                status__in=['pending', 'partial']
+            ).select_related('booking', 'booking__customer')
+        else:
+            # Past/Present: Use actual received payments
+            payments = BookingPayment.objects.filter(
+                date__range=[period_start_dt, period_end_dt],
+                status='paid'
+            ).select_related('booking', 'booking__customer')
+
+        for payment in payments:
+            amount = convert_amount(payment.amount_paid, payment.booking.currency, currency_filter)
+            total_inflows += amount
+            inflows.append({
+                'id': str(payment.id),
+                'type': 'booking_payment',
+                'description': f"Payment - {payment.booking.customer.name if payment.booking.customer else 'N/A'}",
+                'amount': float(amount),
+                'originalAmount': float(payment.amount_paid),
+                'originalCurrency': payment.booking.currency,
+                'date': payment.date.strftime('%Y-%m-%d') if payment.date else '',
+                'status': 'actual' if not is_future else 'projected',
+                'category': 'revenue'
+            })
+
+        # Incoming bank transfers
+        incoming_transfers = BankTransfer.objects.filter(
+            transfer_date__range=[period_start, period_end],
+            status='completed' if not is_future else 'pending'
+        ).select_related('source_account', 'destination_account')
+
+        for transfer in incoming_transfers:
+            amount = convert_amount(transfer.destination_amount, transfer.destination_currency, currency_filter)
+            total_inflows += amount
+            inflows.append({
+                'id': str(transfer.id),
+                'type': 'transfer_in',
+                'description': f"Transfer from {transfer.source_account.accountName}",
+                'amount': float(amount),
+                'originalAmount': float(transfer.destination_amount),
+                'originalCurrency': transfer.destination_currency,
+                'date': transfer.transfer_date.strftime('%Y-%m-%d'),
+                'status': 'actual' if not is_future else 'projected',
+                'category': 'transfer'
+            })
+
+        # ========== OUTFLOWS ==========
+        outflows = []
+        total_outflows = Decimal('0')
+
+        # Expenses (paid or scheduled)
+        if is_future:
+            # Future: Use scheduled expenses (unpaid)
+            expenses = Expense.objects.filter(
+                due_date__range=[period_start, period_end],
+                payment_date__isnull=True
+            ).select_related('person', 'payment_account')
+        else:
+            # Past/Present: Use paid expenses
+            expenses = Expense.objects.filter(
+                payment_date__range=[period_start, period_end]
+            ).select_related('person', 'payment_account')
+
+        for expense in expenses:
+            amount = convert_amount(expense.amount, expense.currency, currency_filter)
+            total_outflows += amount
+            outflows.append({
+                'id': str(expense.id),
+                'type': 'expense',
+                'description': expense.description or f"{expense.get_category_display()}",
+                'amount': float(amount),
+                'originalAmount': float(expense.amount),
+                'originalCurrency': expense.currency,
+                'date': (expense.payment_date or expense.due_date).strftime('%Y-%m-%d'),
+                'status': 'actual' if not is_future else 'projected',
+                'category': expense.category,
+                'person': expense.person.full_name if expense.person else None
+            })
+
+        # Commissions (paid or pending)
+        if is_future:
+            commissions = Commission.objects.filter(
+                created_at__range=[period_start_dt, period_end_dt],
+                status='pending'
+            )
+        else:
+            commissions = Commission.objects.filter(
+                created_at__range=[period_start_dt, period_end_dt],
+                status='paid'
+            )
+
+        for commission in commissions:
+            amount = convert_amount(commission.commission_amount, commission.currency, currency_filter)
+            total_outflows += amount
+            outflows.append({
+                'id': str(commission.id),
+                'type': 'commission',
+                'description': f"Commission - {commission.salesperson.username if commission.salesperson else commission.external_agency}",
+                'amount': float(amount),
+                'originalAmount': float(commission.commission_amount),
+                'originalCurrency': commission.currency,
+                'date': commission.created_at.strftime('%Y-%m-%d'),
+                'status': 'actual' if not is_future else 'projected',
+                'category': 'commission'
+            })
+
+        # Outgoing bank transfers
+        outgoing_transfers = BankTransfer.objects.filter(
+            transfer_date__range=[period_start, period_end],
+            status='completed' if not is_future else 'pending'
+        ).select_related('source_account', 'destination_account')
+
+        for transfer in outgoing_transfers:
+            amount = convert_amount(transfer.source_amount, transfer.source_currency, currency_filter)
+            total_outflows += amount
+            outflows.append({
+                'id': str(transfer.id),
+                'type': 'transfer_out',
+                'description': f"Transfer to {transfer.destination_account.accountName}",
+                'amount': float(amount),
+                'originalAmount': float(transfer.source_amount),
+                'originalCurrency': transfer.source_currency,
+                'date': transfer.transfer_date.strftime('%Y-%m-%d'),
+                'status': 'actual' if not is_future else 'projected',
+                'category': 'transfer'
+            })
+
+        net_cash_flow = total_inflows - total_outflows
+
+        return {
+            'inflows': inflows,
+            'outflows': outflows,
+            'totalInflows': float(total_inflows),
+            'totalOutflows': float(total_outflows),
+            'netCashFlow': float(net_cash_flow),
+            'isFuture': is_future
+        }
+
+    # Generate periods
+    periods = []
+    running_balance = opening_balance
+    current_date = start_date
+
+    while current_date <= end_date:
+        period_start, period_end = get_period_boundaries(current_date, period_type)
+
+        # Skip if we've already processed this period (for weekly/monthly)
+        if periods and periods[-1].get('startDate') == period_start.strftime('%Y-%m-%d'):
+            current_date += timedelta(days=1)
+            continue
+
+        # Adjust period end to not exceed report end date
+        if period_end > end_date:
+            period_end = end_date
+
+        # Skip future periods if projections disabled
+        if not include_projections and period_start > today:
+            break
+
+        cash_flow = get_period_cash_flow(period_start, period_end)
+
+        period_opening = running_balance
+        period_closing = running_balance + Decimal(str(cash_flow['netCashFlow']))
+        running_balance = period_closing
+
+        # Generate period label
+        if period_type == 'daily':
+            period_label = period_start.strftime('%b %d, %Y')
+            period_key = period_start.strftime('%Y-%m-%d')
+        elif period_type == 'weekly':
+            period_label = f"Week of {period_start.strftime('%b %d')}"
+            period_key = period_start.strftime('%Y-W%W')
+        else:  # monthly
+            period_label = period_start.strftime('%B %Y')
+            period_key = period_start.strftime('%Y-%m')
+
+        periods.append({
+            'period': period_key,
+            'periodLabel': period_label,
+            'startDate': period_start.strftime('%Y-%m-%d'),
+            'endDate': period_end.strftime('%Y-%m-%d'),
+            'openingBalance': float(period_opening),
+            'closingBalance': float(period_closing),
+            'isFuture': cash_flow['isFuture'],
+            **cash_flow
+        })
+
+        # Move to next period
+        if period_type == 'daily':
+            current_date += timedelta(days=1)
+        elif period_type == 'weekly':
+            current_date = period_end + timedelta(days=1)
+        else:  # monthly
+            current_date = (period_start + relativedelta(months=1)).replace(day=1)
+
+    # Calculate summary
+    total_inflows = sum(p['totalInflows'] for p in periods)
+    total_outflows = sum(p['totalOutflows'] for p in periods)
+    actual_periods = [p for p in periods if not p['isFuture']]
+    projected_periods = [p for p in periods if p['isFuture']]
+
+    return Response({
+        'reportType': 'Cash Flow Statement',
+        'periodType': period_type,
+        'currency': currency_filter,
+        'dateRange': {
+            'startDate': start_date.strftime('%Y-%m-%d'),
+            'endDate': end_date.strftime('%Y-%m-%d')
+        },
+        'openingBalance': float(opening_balance),
+        'closingBalance': float(running_balance),
+        'summary': {
+            'totalInflows': float(total_inflows),
+            'totalOutflows': float(total_outflows),
+            'netCashFlow': float(total_inflows - total_outflows),
+            'actualInflows': float(sum(p['totalInflows'] for p in actual_periods)),
+            'actualOutflows': float(sum(p['totalOutflows'] for p in actual_periods)),
+            'projectedInflows': float(sum(p['totalInflows'] for p in projected_periods)),
+            'projectedOutflows': float(sum(p['totalOutflows'] for p in projected_periods)),
+        },
+        'periods': periods
     })
