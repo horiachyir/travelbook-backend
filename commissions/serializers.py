@@ -80,13 +80,11 @@ class CommissionSerializer(serializers.ModelSerializer):
             return {
                 'id': str(first_tour.tour.id),
                 'name': first_tour.tour.name,
-                'code': first_tour.tour.code,
                 'destination': first_tour.destination.name if first_tour.destination else ''
             }
         return {
             'id': '',
             'name': 'N/A',
-            'code': 'N/A',
             'destination': ''
         }
 
@@ -160,7 +158,7 @@ class CommissionSerializer(serializers.ModelSerializer):
         """Get payment status from booking payments"""
         if not obj.booking:
             return 'unknown'
-        payments = obj.booking.payments.all()
+        payments = obj.booking.payment_details.all()
         if not payments.exists():
             return 'pending'
         total_paid = sum(p.amount for p in payments if p.status == 'confirmed')
@@ -235,13 +233,11 @@ class OperatorPaymentSerializer(serializers.ModelSerializer):
             return {
                 'id': str(obj.booking_tour.tour.id),
                 'name': obj.booking_tour.tour.name,
-                'code': obj.booking_tour.tour.code,
                 'destination': obj.booking_tour.destination.name if obj.booking_tour.destination else ''
             }
         return {
             'id': '',
             'name': 'N/A',
-            'code': 'N/A',
             'destination': ''
         }
 

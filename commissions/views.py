@@ -5,11 +5,13 @@ from rest_framework.decorators import api_view, permission_classes
 from django.db.models import Q, Sum
 from django.db import transaction
 from django.utils import timezone
-from .models import Commission, OperatorPayment, CommissionClosing
+from django.http import HttpResponse
+from .models import Commission, OperatorPayment, CommissionClosing, CommissionAuditLog
 from .serializers import CommissionSerializer, OperatorPaymentSerializer, CommissionClosingSerializer
 from financial.models import Expense
 from datetime import datetime
 import logging
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +413,13 @@ def close_commissions(request):
         if not recipient_name:
             return Response({'error': 'Recipient name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Only admins can make adjustments (edit commission values)
+        if adjustments and not request.user.is_staff:
+            return Response(
+                {'error': 'Only administrators can modify commission values'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         with transaction.atomic():
             # Get commissions
             commissions = Commission.objects.filter(id__in=commission_ids, is_closed=False)
@@ -418,7 +427,7 @@ def close_commissions(request):
             if not commissions.exists():
                 return Response({'error': 'No valid commissions found'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Apply any adjustments
+            # Apply any adjustments (admin only - checked above)
             for comm in commissions:
                 if str(comm.id) in adjustments:
                     adj = adjustments[str(comm.id)]
@@ -447,15 +456,36 @@ def close_commissions(request):
                 created_by=request.user
             )
 
-            # Update commissions
+            # Update commissions and create audit logs
             now = timezone.now()
             for comm in commissions:
+                old_values = {
+                    'is_closed': comm.is_closed,
+                    'commission_amount': float(comm.commission_amount),
+                }
                 comm.is_closed = True
                 comm.closed_at = now
                 comm.closed_by = request.user
                 comm.closing = closing
                 comm.invoice_number = closing.invoice_number
                 comm.save()
+
+                # Create audit log for closing
+                CommissionAuditLog.log_change(
+                    entity_type='commission',
+                    entity_id=comm.id,
+                    action='close',
+                    performed_by=request.user,
+                    booking_id=comm.booking_id,
+                    old_value=old_values,
+                    new_value={
+                        'is_closed': True,
+                        'commission_amount': float(comm.commission_amount),
+                        'invoice_number': closing.invoice_number,
+                    },
+                    closing=closing,
+                    request=request
+                )
 
             # Create expense in Accounts Payable
             expense = Expense.objects.create(
@@ -475,6 +505,22 @@ def close_commissions(request):
             # Link expense to closing
             closing.expense = expense
             closing.save()
+
+            # Log closing creation
+            CommissionAuditLog.log_change(
+                entity_type='closing',
+                entity_id=closing.id,
+                action='create',
+                performed_by=request.user,
+                new_value={
+                    'invoice_number': closing.invoice_number,
+                    'recipient_name': closing.recipient_name,
+                    'total_amount': float(closing.total_amount),
+                    'item_count': closing.item_count,
+                },
+                closing=closing,
+                request=request
+            )
 
             serializer = CommissionClosingSerializer(closing)
             return Response({
@@ -523,6 +569,13 @@ def close_operator_payments(request):
         if not operator_name:
             return Response({'error': 'Operator name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Only admins can make adjustments (edit payment values)
+        if adjustments and not request.user.is_staff:
+            return Response(
+                {'error': 'Only administrators can modify payment values'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         with transaction.atomic():
             # Get payments
             payments = OperatorPayment.objects.filter(id__in=payment_ids, is_closed=False)
@@ -538,7 +591,7 @@ def close_operator_payments(request):
                     'non_closable_ids': [str(p.id) for p in non_closable]
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Apply any adjustments
+            # Apply any adjustments (admin only - checked above)
             for payment in payments:
                 if str(payment.id) in adjustments:
                     adj = adjustments[str(payment.id)]
@@ -564,15 +617,36 @@ def close_operator_payments(request):
                 created_by=request.user
             )
 
-            # Update payments
+            # Update payments and create audit logs
             now = timezone.now()
             for payment in payments:
+                old_values = {
+                    'is_closed': payment.is_closed,
+                    'cost_amount': float(payment.cost_amount),
+                }
                 payment.is_closed = True
                 payment.closed_at = now
                 payment.closed_by = request.user
                 payment.closing = closing
                 payment.invoice_number = closing.invoice_number
                 payment.save()
+
+                # Create audit log for closing
+                CommissionAuditLog.log_change(
+                    entity_type='operator_payment',
+                    entity_id=payment.id,
+                    action='close',
+                    performed_by=request.user,
+                    booking_id=payment.booking_tour.booking_id,
+                    old_value=old_values,
+                    new_value={
+                        'is_closed': True,
+                        'cost_amount': float(payment.cost_amount),
+                        'invoice_number': closing.invoice_number,
+                    },
+                    closing=closing,
+                    request=request
+                )
 
             # Create expense in Accounts Payable
             expense = Expense.objects.create(
@@ -591,6 +665,22 @@ def close_operator_payments(request):
             # Link expense to closing
             closing.expense = expense
             closing.save()
+
+            # Log closing creation
+            CommissionAuditLog.log_change(
+                entity_type='closing',
+                entity_id=closing.id,
+                action='create',
+                performed_by=request.user,
+                new_value={
+                    'invoice_number': closing.invoice_number,
+                    'recipient_name': closing.recipient_name,
+                    'total_amount': float(closing.total_amount),
+                    'item_count': closing.item_count,
+                },
+                closing=closing,
+                request=request
+            )
 
             serializer = CommissionClosingSerializer(closing)
             return Response({
@@ -628,10 +718,23 @@ def undo_closing(request, closing_id):
         with transaction.atomic():
             closing = CommissionClosing.objects.get(id=closing_id, is_active=True)
 
-            # Reopen commissions or payments
+            # Reopen commissions or payments and create audit logs
             if closing.closing_type == 'operator':
                 payments = closing.operator_payments.all()
                 for payment in payments:
+                    # Create audit log for reopening
+                    CommissionAuditLog.log_change(
+                        entity_type='operator_payment',
+                        entity_id=payment.id,
+                        action='reopen',
+                        performed_by=request.user,
+                        booking_id=payment.booking_tour.booking_id,
+                        old_value={'is_closed': True, 'invoice_number': payment.invoice_number},
+                        new_value={'is_closed': False, 'invoice_number': None},
+                        reason=reason,
+                        closing=closing,
+                        request=request
+                    )
                     payment.is_closed = False
                     payment.closed_at = None
                     payment.closed_by = None
@@ -641,6 +744,19 @@ def undo_closing(request, closing_id):
             else:
                 commissions = closing.commissions.all()
                 for comm in commissions:
+                    # Create audit log for reopening
+                    CommissionAuditLog.log_change(
+                        entity_type='commission',
+                        entity_id=comm.id,
+                        action='reopen',
+                        performed_by=request.user,
+                        booking_id=comm.booking_id,
+                        old_value={'is_closed': True, 'invoice_number': comm.invoice_number},
+                        new_value={'is_closed': False, 'invoice_number': None},
+                        reason=reason,
+                        closing=closing,
+                        request=request
+                    )
                     comm.is_closed = False
                     comm.closed_at = None
                     comm.closed_by = None
@@ -659,6 +775,19 @@ def undo_closing(request, closing_id):
             closing.undone_by = request.user
             closing.undo_reason = reason
             closing.save()
+
+            # Log closing undo
+            CommissionAuditLog.log_change(
+                entity_type='closing',
+                entity_id=closing.id,
+                action='reopen',
+                performed_by=request.user,
+                old_value={'is_active': True},
+                new_value={'is_active': False, 'undo_reason': reason},
+                reason=reason,
+                closing=closing,
+                request=request
+            )
 
             return Response({
                 'message': f'Successfully undone closing {closing.invoice_number}',
@@ -814,4 +943,210 @@ def extended_unique_values(request):
         })
     except Exception as e:
         logger.error(f"Error fetching extended unique values: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_invoice(request, closing_id):
+    """
+    GET /api/commissions/closings/<closing_id>/invoice/
+    Generate and download PDF invoice for a closing
+    """
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+        closing = CommissionClosing.objects.select_related('created_by').get(id=closing_id)
+
+        # Create buffer for PDF
+        buffer = io.BytesIO()
+
+        # Create PDF document
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=0.5*inch,
+            leftMargin=0.5*inch,
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch
+        )
+
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            alignment=TA_CENTER,
+            spaceAfter=20
+        )
+        header_style = ParagraphStyle(
+            'Header',
+            parent=styles['Normal'],
+            fontSize=10,
+            alignment=TA_RIGHT
+        )
+        normal_style = styles['Normal']
+        bold_style = ParagraphStyle(
+            'Bold',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica-Bold'
+        )
+
+        elements = []
+
+        # Header - Invoice Info
+        invoice_type = "Commission Invoice" if closing.closing_type in ['salesperson', 'agency'] else "Operator Payment Invoice"
+        elements.append(Paragraph(invoice_type, title_style))
+        elements.append(Spacer(1, 10))
+
+        # Invoice details table
+        invoice_info = [
+            ['Invoice Number:', closing.invoice_number],
+            ['Date:', closing.created_at.strftime('%Y-%m-%d')],
+            ['Period:', f"{closing.period_start} to {closing.period_end}"],
+            ['Recipient:', closing.recipient_name],
+            ['Type:', closing.closing_type.title()],
+        ]
+
+        info_table = Table(invoice_info, colWidths=[2*inch, 4*inch])
+        info_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 20))
+
+        # Items table
+        if closing.closing_type == 'operator':
+            payments = closing.operator_payments.select_related(
+                'booking_tour__booking__customer',
+                'booking_tour__tour'
+            ).all()
+
+            # Header row
+            table_data = [['#', 'Reservation', 'Tour', 'Client', 'Operation Date', 'Amount']]
+
+            # Data rows
+            for idx, payment in enumerate(payments, 1):
+                table_data.append([
+                    str(idx),
+                    f"R{str(payment.booking_tour.booking.id)[-12:]}",
+                    payment.booking_tour.tour.name if payment.booking_tour.tour else 'N/A',
+                    payment.booking_tour.booking.customer.name if payment.booking_tour.booking.customer else 'N/A',
+                    payment.booking_tour.date.strftime('%Y-%m-%d') if payment.booking_tour.date else 'N/A',
+                    f"{closing.currency} {payment.cost_amount:,.0f}"
+                ])
+        else:
+            commissions = closing.commissions.select_related(
+                'booking__customer',
+                'salesperson'
+            ).prefetch_related('booking__booking_tours__tour').all()
+
+            # Header row
+            table_data = [['#', 'Reservation', 'Tour', 'Client', 'Gross', 'Commission %', 'Commission']]
+
+            # Data rows
+            for idx, comm in enumerate(commissions, 1):
+                first_tour = comm.booking.booking_tours.first()
+                tour_name = first_tour.tour.name if first_tour and first_tour.tour else 'N/A'
+                table_data.append([
+                    str(idx),
+                    f"R{str(comm.booking.id)[-12:]}",
+                    tour_name[:25] + '...' if len(tour_name) > 25 else tour_name,
+                    comm.booking.customer.name if comm.booking.customer else 'N/A',
+                    f"{closing.currency} {comm.gross_total:,.0f}",
+                    f"{comm.commission_percentage}%",
+                    f"{closing.currency} {comm.commission_amount:,.0f}"
+                ])
+
+        # Create table with appropriate column widths
+        if closing.closing_type == 'operator':
+            col_widths = [0.3*inch, 1*inch, 1.8*inch, 1.5*inch, 1*inch, 1.2*inch]
+        else:
+            col_widths = [0.3*inch, 0.9*inch, 1.5*inch, 1.2*inch, 1*inch, 0.8*inch, 1*inch]
+
+        items_table = Table(table_data, colWidths=col_widths)
+        items_table.setStyle(TableStyle([
+            # Header row
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a365d')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+
+            # Data rows
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+            ('ALIGN', (-2, 0), (-2, -1), 'RIGHT'),
+
+            # Grid
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f7fafc')]),
+        ]))
+        elements.append(items_table)
+        elements.append(Spacer(1, 20))
+
+        # Summary section
+        summary_data = [
+            ['Total Items:', str(closing.item_count)],
+            ['Total Amount:', f"{closing.currency} {closing.total_amount:,.0f}"],
+        ]
+
+        summary_table = Table(summary_data, colWidths=[4.5*inch, 2*inch])
+        summary_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e2e8f0')),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 30))
+
+        # Footer
+        footer_text = f"Generated on {timezone.now().strftime('%Y-%m-%d %H:%M')} by {closing.created_by.full_name if closing.created_by else 'System'}"
+        elements.append(Paragraph(footer_text, ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=8,
+            textColor=colors.grey,
+            alignment=TA_CENTER
+        )))
+
+        # Build PDF
+        doc.build(elements)
+
+        # Get PDF from buffer
+        buffer.seek(0)
+        pdf = buffer.getvalue()
+        buffer.close()
+
+        # Create response
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="invoice_{closing.invoice_number}.pdf"'
+
+        return response
+
+    except CommissionClosing.DoesNotExist:
+        return Response({'error': 'Closing not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ImportError as e:
+        logger.error(f"ReportLab not installed: {e}")
+        return Response({'error': 'PDF generation not available. Please install reportlab.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"Error generating invoice PDF: {e}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

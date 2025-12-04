@@ -226,3 +226,142 @@ class CommissionClosing(models.Model):
         ).count() + 1
 
         return f"{prefix}-{year}-{count:05d}"
+
+
+class CommissionAuditLog(models.Model):
+    """
+    Audit log for tracking all changes to commissions and operator payments.
+    Records field-level changes for compliance and accountability.
+    """
+
+    ACTION_CHOICES = [
+        ('create', 'Created'),
+        ('update', 'Updated'),
+        ('close', 'Closed'),
+        ('reopen', 'Reopened'),
+        ('adjust', 'Adjusted'),
+        ('delete', 'Deleted'),
+    ]
+
+    ENTITY_TYPE_CHOICES = [
+        ('commission', 'Commission'),
+        ('operator_payment', 'Operator Payment'),
+        ('closing', 'Commission Closing'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # What was changed
+    entity_type = models.CharField(max_length=30, choices=ENTITY_TYPE_CHOICES)
+    entity_id = models.UUIDField(help_text="ID of the changed commission, payment, or closing")
+
+    # Related booking for context
+    booking_id = models.UUIDField(null=True, blank=True, help_text="Related booking ID if applicable")
+
+    # What action was performed
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+
+    # Field-level changes (JSON)
+    field_name = models.CharField(max_length=100, blank=True, help_text="Name of the changed field")
+    old_value = models.TextField(blank=True, null=True, help_text="Previous value (JSON-encoded if complex)")
+    new_value = models.TextField(blank=True, null=True, help_text="New value (JSON-encoded if complex)")
+
+    # Additional context
+    reason = models.TextField(blank=True, help_text="Reason for the change (required for admin adjustments)")
+    notes = models.TextField(blank=True, help_text="Additional notes about the change")
+
+    # Related closing (if this change was part of a closing)
+    closing = models.ForeignKey(
+        'CommissionClosing',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs',
+        help_text="Closing this change was part of"
+    )
+
+    # Who made the change
+    performed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='commission_audit_logs'
+    )
+
+    # When
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # IP address and user agent for security
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        db_table = 'commission_audit_logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['entity_type', 'entity_id']),
+            models.Index(fields=['booking_id']),
+            models.Index(fields=['action']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['performed_by']),
+        ]
+        verbose_name = 'Commission Audit Log'
+        verbose_name_plural = 'Commission Audit Logs'
+
+    def __str__(self):
+        return f"{self.action} {self.entity_type} {self.entity_id} by {self.performed_by}"
+
+    @classmethod
+    def log_change(cls, entity_type, entity_id, action, performed_by, booking_id=None,
+                   field_name='', old_value=None, new_value=None, reason='', notes='',
+                   closing=None, request=None):
+        """
+        Helper method to create audit log entries.
+
+        Args:
+            entity_type: 'commission', 'operator_payment', or 'closing'
+            entity_id: UUID of the entity
+            action: 'create', 'update', 'close', 'reopen', 'adjust', or 'delete'
+            performed_by: User who made the change
+            booking_id: Related booking ID (optional)
+            field_name: Name of the changed field (optional)
+            old_value: Previous value (optional)
+            new_value: New value (optional)
+            reason: Reason for the change (required for adjustments)
+            notes: Additional notes (optional)
+            closing: Related CommissionClosing instance (optional)
+            request: Django request object for IP/user agent (optional)
+        """
+        import json
+
+        # Convert complex values to JSON strings
+        if old_value is not None and not isinstance(old_value, str):
+            old_value = json.dumps(old_value)
+        if new_value is not None and not isinstance(new_value, str):
+            new_value = json.dumps(new_value)
+
+        log_entry = cls(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            performed_by=performed_by,
+            booking_id=booking_id,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=new_value,
+            reason=reason,
+            notes=notes,
+            closing=closing,
+        )
+
+        # Extract IP and user agent from request if available
+        if request:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                log_entry.ip_address = x_forwarded_for.split(',')[0].strip()
+            else:
+                log_entry.ip_address = request.META.get('REMOTE_ADDR')
+            log_entry.user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]
+
+        log_entry.save()
+        return log_entry

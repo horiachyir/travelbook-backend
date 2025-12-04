@@ -19,4 +19,5 @@ urlpatterns = [
     path('closings/', views.ClosingListView.as_view(), name='closing-list'),
     path('closings/<uuid:closing_id>/', views.closing_detail, name='closing-detail'),
     path('closings/<uuid:closing_id>/undo/', views.undo_closing, name='undo-closing'),
+    path('closings/<uuid:closing_id>/invoice/', views.download_invoice, name='download-invoice'),
 ]
