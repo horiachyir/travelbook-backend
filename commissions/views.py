@@ -23,6 +23,7 @@ class CommissionListView(generics.ListAPIView):
     """
     serializer_class = CommissionSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Disable pagination - return all results
 
     def get_queryset(self):
         queryset = Commission.objects.select_related(
@@ -231,6 +232,7 @@ class OperatorPaymentListView(generics.ListAPIView):
     """
     serializer_class = OperatorPaymentSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Disable pagination - return all results
 
     def get_queryset(self):
         queryset = OperatorPayment.objects.select_related(
@@ -808,6 +810,7 @@ class ClosingListView(generics.ListAPIView):
     """
     serializer_class = CommissionClosingSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Disable pagination - return all results
 
     def get_queryset(self):
         queryset = CommissionClosing.objects.select_related('created_by', 'undone_by', 'expense').all()

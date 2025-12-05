@@ -202,6 +202,7 @@ class OperatorPaymentSerializer(serializers.ModelSerializer):
             'operation_date',
             'tour',
             'client',
+            'passengers',
             'operator_name',
             'operation_type',
             'cost_amount',
