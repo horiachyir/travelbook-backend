@@ -16,18 +16,6 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 # Get ALLOWED_HOSTS from environment variable or use defaults
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# Always include Render domains and test server
-render_domains = [
-    'travelbook-backend.onrender.com',
-    '.onrender.com',  # Wildcard for any onrender.com subdomain
-    '.travelbook-backend.onrender.com',  # Wildcard for any subdomain
-    'testserver'  # For Django test client
-]
-
-for domain in render_domains:
-    if domain not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(domain)
-
 # Strip any whitespace from hosts
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 
@@ -233,28 +221,18 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
     "http://127.0.0.1:8080",
     "http://localhost:8080",
-    "http://localhost:8081",
-    "https://travelbook-henna.vercel.app",
-    "https://travelbook-lilac.vercel.app"
+    "https://viajadesck.com",
+    "https://www.viajadesck.com"
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
     "http://127.0.0.1:8080",
     "http://localhost:8080",
-    "http://localhost:8081",
-    "https://travelbook-henna.vercel.app",
-    "https://travelbook-lilac.vercel.app",
-    "https://travelbook-backend.onrender.com"
+    "https://viajadesck.com",
+    "https://www.viajadesck.com",
+    "https://api.viajadesck.com",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -288,7 +266,7 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
 
 # Frontend URL
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:8080')
 
 # Google OAuth
 GOOGLE_CLIENT_ID = config('GOOGLE_CLIENT_ID', default='')
