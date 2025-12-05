@@ -20,6 +20,9 @@ class CommissionListView(generics.ListAPIView):
     """
     GET /api/commissions/
     List all commissions with optional filtering
+
+    OPTIMIZED: Uses comprehensive select_related and prefetch_related
+    to minimize database queries.
     """
     serializer_class = CommissionSerializer
     permission_classes = [IsAuthenticated]
@@ -29,11 +32,13 @@ class CommissionListView(generics.ListAPIView):
         queryset = Commission.objects.select_related(
             'booking',
             'booking__customer',
-            'salesperson'
+            'salesperson',
+            'closed_by',
+            'closing'
         ).prefetch_related(
-            'booking__booking_tours',
             'booking__booking_tours__tour',
-            'booking__booking_tours__destination'
+            'booking__booking_tours__destination',
+            'booking__payment_details'
         ).all()
 
         # Apply filters from query parameters

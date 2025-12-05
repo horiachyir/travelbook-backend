@@ -1635,126 +1635,113 @@ def get_dashboard_data(request):
     - Monthly sales data (current and previous 2 years)
     - Monthly reservations and PAX data
     - Recent reservations
+
+    OPTIMIZED: Uses aggregated queries instead of loops to reduce DB calls from 60+ to ~10
     """
     try:
-        from django.db.models import Sum, Count, Q
+        from django.db.models import Sum, Count, Q, F, Value, IntegerField
+        from django.db.models.functions import ExtractYear, ExtractMonth, Coalesce
         from django.utils import timezone
         from datetime import datetime, timedelta
         from customers.models import Customer
 
         current_year = timezone.now().year
         current_date = timezone.now()
-
-        # ===== 1. STATUS ALERTS (Overdue/Pending Payments) =====
-        status_alerts = []
-        alert_id = 1
-
-        # Get bookings with payment issues
-        overdue_bookings = Booking.objects.filter(
-            payment_details__status='overdue'
-        ).select_related('customer').prefetch_related('payment_details').distinct()[:5]
-
-        for booking in overdue_bookings:
-            payment = booking.payment_details.filter(status='overdue').first()
-            if payment:
-                days_overdue = (current_date - payment.date).days if payment.date else 0
-                status_alerts.append({
-                    'id': alert_id,
-                    'type': 'overdue',
-                    'title': 'Overdue Payment',
-                    'description': f'Payment for {booking.customer.name} is {days_overdue} days overdue',
-                    'amount': f'${float(payment.amount_paid):.2f}' if payment.amount_paid else '$0.00',
-                    'daysOverdue': days_overdue
-                })
-                alert_id += 1
-
-        # Get pending payments due soon
-        pending_bookings = Booking.objects.filter(
-            payment_details__status__in=['pending', 'partial']
-        ).select_related('customer').prefetch_related('payment_details').distinct()[:5]
-
-        for booking in pending_bookings:
-            payment = booking.payment_details.filter(status__in=['pending', 'partial']).first()
-            if payment:
-                days_due = (payment.date - current_date).days if payment.date else 0
-                status_alerts.append({
-                    'id': alert_id,
-                    'type': 'pending',
-                    'title': 'Pending Payment',
-                    'description': f'Payment for {booking.customer.name} due soon',
-                    'amount': f'${float(payment.amount_paid):.2f}' if payment.amount_paid else '$0.00',
-                    'dueIn': max(days_due, 0)
-                })
-                alert_id += 1
-
-        # ===== 2. KEY METRICS =====
-
-        # Total Revenue (all time)
-        total_revenue = BookingPayment.objects.filter(
-            status='paid'
-        ).aggregate(total=Sum('amount_paid'))['total'] or 0
-
-        # Active Reservations (confirmed and pending)
-        active_reservations = Booking.objects.filter(
-            status__in=['confirmed', 'pending']
-        ).count()
-
-        # Total Customers
-        total_customers = Customer.objects.count()
-
-        # Total PAX (current year)
-        current_year_pax = BookingTour.objects.filter(
-            booking__created_at__year=current_year
-        ).aggregate(
-            total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
-        )['total'] or 0
-
-        # Calculate year-over-year changes (comparing to last year)
         last_year = current_year - 1
+        two_years_ago = current_year - 2
 
-        # Last year revenue
-        last_year_revenue = BookingPayment.objects.filter(
-            status='paid',
-            created_at__year=last_year
-        ).aggregate(total=Sum('amount_paid'))['total'] or 1
+        # ===== 1. STATUS ALERTS (Overdue/Pending Payments) - OPTIMIZED =====
+        status_alerts = []
 
-        revenue_change = ((total_revenue - last_year_revenue) / last_year_revenue * 100) if last_year_revenue > 0 else 0
+        # Get overdue payments directly (single query)
+        overdue_payments = BookingPayment.objects.filter(
+            status='overdue'
+        ).select_related('booking__customer').order_by('-date')[:5]
 
-        # Last year reservations
-        last_year_reservations = Booking.objects.filter(
-            created_at__year=last_year,
-            status__in=['confirmed', 'pending']
-        ).count() or 1
+        for idx, payment in enumerate(overdue_payments, 1):
+            days_overdue = (current_date - payment.date).days if payment.date else 0
+            status_alerts.append({
+                'id': idx,
+                'type': 'overdue',
+                'title': 'Overdue Payment',
+                'description': f'Payment for {payment.booking.customer.name} is {days_overdue} days overdue',
+                'amount': f'${float(payment.amount_paid):.2f}' if payment.amount_paid else '$0.00',
+                'daysOverdue': days_overdue
+            })
 
-        current_year_reservations = Booking.objects.filter(
-            created_at__year=current_year,
-            status__in=['confirmed', 'pending']
-        ).count()
+        # Get pending payments directly (single query)
+        pending_payments = BookingPayment.objects.filter(
+            status__in=['pending', 'partial']
+        ).select_related('booking__customer').order_by('date')[:5]
 
-        reservations_change = ((current_year_reservations - last_year_reservations) / last_year_reservations * 100) if last_year_reservations > 0 else 0
+        alert_id = len(status_alerts) + 1
+        for payment in pending_payments:
+            days_due = (payment.date - current_date).days if payment.date else 0
+            status_alerts.append({
+                'id': alert_id,
+                'type': 'pending',
+                'title': 'Pending Payment',
+                'description': f'Payment for {payment.booking.customer.name} due soon',
+                'amount': f'${float(payment.amount_paid):.2f}' if payment.amount_paid else '$0.00',
+                'dueIn': max(days_due, 0)
+            })
+            alert_id += 1
 
-        # Customer growth (last 12 months vs previous 12 months)
+        # ===== 2. KEY METRICS - OPTIMIZED (single aggregation query) =====
         twelve_months_ago = current_date - timedelta(days=365)
         twenty_four_months_ago = current_date - timedelta(days=730)
 
-        recent_customers = Customer.objects.filter(
-            created_at__gte=twelve_months_ago
-        ).count()
+        # Single query for all revenue metrics
+        revenue_metrics = BookingPayment.objects.filter(status='paid').aggregate(
+            total_revenue=Coalesce(Sum('amount_paid'), Value(0)),
+            last_year_revenue=Coalesce(Sum('amount_paid', filter=Q(created_at__year=last_year)), Value(0)),
+            current_year_revenue=Coalesce(Sum('amount_paid', filter=Q(created_at__year=current_year)), Value(0))
+        )
+        total_revenue = revenue_metrics['total_revenue']
+        last_year_revenue = revenue_metrics['last_year_revenue'] or 1
 
-        previous_customers = Customer.objects.filter(
-            created_at__gte=twenty_four_months_ago,
-            created_at__lt=twelve_months_ago
-        ).count() or 1
+        # Single query for reservation counts
+        reservation_counts = Booking.objects.aggregate(
+            active=Count('id', filter=Q(status__in=['confirmed', 'pending'])),
+            last_year=Count('id', filter=Q(created_at__year=last_year, status__in=['confirmed', 'pending'])),
+            current_year=Count('id', filter=Q(created_at__year=current_year, status__in=['confirmed', 'pending']))
+        )
+        active_reservations = reservation_counts['active']
+        last_year_reservations = reservation_counts['last_year'] or 1
+        current_year_reservations = reservation_counts['current_year']
 
+        # Single query for customer counts
+        customer_counts = Customer.objects.aggregate(
+            total=Count('id'),
+            recent=Count('id', filter=Q(created_at__gte=twelve_months_ago)),
+            previous=Count('id', filter=Q(created_at__gte=twenty_four_months_ago, created_at__lt=twelve_months_ago))
+        )
+        total_customers = customer_counts['total']
+        recent_customers = customer_counts['recent']
+        previous_customers = customer_counts['previous'] or 1
+
+        # Single query for PAX metrics
+        pax_metrics = BookingTour.objects.aggregate(
+            current_year=Coalesce(
+                Sum('adult_pax', filter=Q(booking__created_at__year=current_year)) +
+                Sum('child_pax', filter=Q(booking__created_at__year=current_year)) +
+                Sum('infant_pax', filter=Q(booking__created_at__year=current_year)),
+                Value(0)
+            ),
+            last_year=Coalesce(
+                Sum('adult_pax', filter=Q(booking__created_at__year=last_year)) +
+                Sum('child_pax', filter=Q(booking__created_at__year=last_year)) +
+                Sum('infant_pax', filter=Q(booking__created_at__year=last_year)),
+                Value(0)
+            )
+        )
+        current_year_pax = pax_metrics['current_year'] or 0
+        last_year_pax = pax_metrics['last_year'] or 1
+
+        # Calculate changes
+        revenue_change = ((total_revenue - last_year_revenue) / last_year_revenue * 100) if last_year_revenue > 0 else 0
+        reservations_change = ((current_year_reservations - last_year_reservations) / last_year_reservations * 100) if last_year_reservations > 0 else 0
         customers_change = ((recent_customers - previous_customers) / previous_customers * 100) if previous_customers > 0 else 0
-
-        # PAX change
-        last_year_pax = BookingTour.objects.filter(
-            booking__created_at__year=last_year
-        ).aggregate(
-            total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
-        )['total'] or 1
-
         pax_change = ((current_year_pax - last_year_pax) / last_year_pax * 100) if last_year_pax > 0 else 0
 
         metrics = {
@@ -1780,74 +1767,96 @@ def get_dashboard_data(request):
             }
         }
 
-        # ===== 3. MONTHLY SALES DATA (3 years comparison) =====
-        monthly_sales = []
+        # ===== 3. MONTHLY SALES DATA - OPTIMIZED (single query instead of 36) =====
         months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+        # Single query for all monthly sales data (3 years)
+        monthly_sales_data = BookingPayment.objects.filter(
+            status='paid',
+            date__year__gte=two_years_ago,
+            date__year__lte=current_year
+        ).annotate(
+            year=ExtractYear('date'),
+            month=ExtractMonth('date')
+        ).values('year', 'month').annotate(
+            total=Sum('amount_paid')
+        ).order_by('year', 'month')
+
+        # Build lookup dict
+        sales_lookup = {}
+        for item in monthly_sales_data:
+            key = (item['year'], item['month'])
+            sales_lookup[key] = float(item['total'] or 0)
+
+        # Build monthly sales response
+        monthly_sales = []
         for month_num in range(1, 13):
             month_data = {'month': months[month_num - 1]}
-
-            for year in [current_year - 2, current_year - 1, current_year]:
-                revenue = BookingPayment.objects.filter(
-                    status='paid',
-                    date__year=year,
-                    date__month=month_num
-                ).aggregate(total=Sum('amount_paid'))['total'] or 0
-
-                month_data[str(year)] = float(revenue)
-
+            for year in [two_years_ago, last_year, current_year]:
+                month_data[str(year)] = sales_lookup.get((year, month_num), 0)
             monthly_sales.append(month_data)
 
-        # ===== 4. MONTHLY RESERVATIONS & PAX DATA =====
+        # ===== 4. MONTHLY RESERVATIONS & PAX DATA - OPTIMIZED (2 queries instead of 24) =====
+
+        # Single query for monthly reservation counts
+        monthly_res_data = Booking.objects.filter(
+            created_at__year=current_year
+        ).annotate(
+            month=ExtractMonth('created_at')
+        ).values('month').annotate(
+            count=Count('id')
+        ).order_by('month')
+
+        res_lookup = {item['month']: item['count'] for item in monthly_res_data}
+
+        # Single query for monthly PAX counts
+        monthly_pax_data = BookingTour.objects.filter(
+            booking__created_at__year=current_year
+        ).annotate(
+            month=ExtractMonth('booking__created_at')
+        ).values('month').annotate(
+            total_pax=Coalesce(Sum('adult_pax'), Value(0)) +
+                      Coalesce(Sum('child_pax'), Value(0)) +
+                      Coalesce(Sum('infant_pax'), Value(0))
+        ).order_by('month')
+
+        pax_lookup = {item['month']: item['total_pax'] or 0 for item in monthly_pax_data}
+
+        # Build monthly reservations response
         monthly_reservations = []
-
         for month_num in range(1, 13):
-            reservations_count = Booking.objects.filter(
-                created_at__year=current_year,
-                created_at__month=month_num
-            ).count()
-
-            pax_count = BookingTour.objects.filter(
-                booking__created_at__year=current_year,
-                booking__created_at__month=month_num
-            ).aggregate(
-                total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
-            )['total'] or 0
-
             monthly_reservations.append({
                 'month': months[month_num - 1],
-                'reservations': reservations_count,
-                'pax': pax_count
+                'reservations': res_lookup.get(month_num, 0),
+                'pax': pax_lookup.get(month_num, 0)
             })
 
-        # ===== 5. RECENT RESERVATIONS =====
+        # ===== 5. RECENT RESERVATIONS - OPTIMIZED (annotate totals to avoid N+1) =====
         recent_bookings = Booking.objects.select_related(
             'customer'
         ).prefetch_related(
-            'booking_tours__tour',
-            'booking_tours__destination'
+            'booking_tours__tour'
+        ).annotate(
+            total_pax=Coalesce(Sum('booking_tours__adult_pax'), Value(0)) +
+                      Coalesce(Sum('booking_tours__child_pax'), Value(0)) +
+                      Coalesce(Sum('booking_tours__infant_pax'), Value(0)),
+            total_amount=Coalesce(Sum('booking_tours__subtotal'), Value(0))
         ).order_by('-created_at')[:4]
 
         recent_reservations = []
         for booking in recent_bookings:
-            first_tour = booking.booking_tours.first()
+            # Use prefetched data
+            tours = list(booking.booking_tours.all())
+            first_tour = tours[0] if tours else None
             if first_tour:
-                total_pax = booking.booking_tours.aggregate(
-                    total=Sum('adult_pax') + Sum('child_pax') + Sum('infant_pax')
-                )['total'] or 0
-
-                total_amount = booking.booking_tours.aggregate(
-                    total=Sum('subtotal')
-                )['total'] or 0
-
                 recent_reservations.append({
                     'id': str(booking.id),
                     'customer': booking.customer.name,
                     'destination': first_tour.tour.name if first_tour.tour else 'N/A',
                     'date': first_tour.date.strftime('%Y-%m-%d') if first_tour.date else '',
                     'status': booking.status,
-                    'amount': f'${float(total_amount):,.2f}',
-                    'pax': total_pax
+                    'amount': f'${float(booking.total_amount):,.2f}',
+                    'pax': booking.total_pax
                 })
 
         # ===== RETURN RESPONSE =====

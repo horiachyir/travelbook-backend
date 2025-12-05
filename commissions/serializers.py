@@ -8,6 +8,9 @@ from tours.models import Tour
 class CommissionSerializer(serializers.ModelSerializer):
     """
     Serializer for Commission model with computed/related fields for the frontend.
+
+    OPTIMIZED: Uses prefetched data instead of making additional queries.
+    Expects the queryset to have proper select_related and prefetch_related.
     """
     # Computed fields from related booking
     reservation_number = serializers.SerializerMethodField()
@@ -59,9 +62,17 @@ class CommissionSerializer(serializers.ModelSerializer):
             'notes',
         ]
 
+    def _get_booking_tours(self, obj):
+        """Get booking tours from prefetched data, cache on object to avoid repeated access"""
+        if not hasattr(obj, '_cached_booking_tours'):
+            # Use prefetched data - convert to list once and sort in Python
+            tours = list(obj.booking.booking_tours.all())
+            tours.sort(key=lambda t: t.date if t.date else '')
+            obj._cached_booking_tours = tours
+        return obj._cached_booking_tours
+
     def get_reservation_number(self, obj):
         """Generate a reservation number from booking ID"""
-        # Use last 7 characters of booking UUID
         return f"R{str(obj.booking.id)[-12:]}"
 
     def get_sale_date(self, obj):
@@ -69,14 +80,15 @@ class CommissionSerializer(serializers.ModelSerializer):
         return obj.booking.created_at.isoformat() if obj.booking.created_at else None
 
     def get_operation_date(self, obj):
-        """Get earliest tour date from booking tours"""
-        first_tour = obj.booking.booking_tours.order_by('date').first()
-        return first_tour.date.isoformat() if first_tour else None
+        """Get earliest tour date from booking tours - uses cached prefetch data"""
+        tours = self._get_booking_tours(obj)
+        return tours[0].date.isoformat() if tours and tours[0].date else None
 
     def get_tour(self, obj):
-        """Get tour information from first booking tour"""
-        first_tour = obj.booking.booking_tours.order_by('date').first()
-        if first_tour and first_tour.tour:
+        """Get tour information from first booking tour - uses cached prefetch data"""
+        tours = self._get_booking_tours(obj)
+        if tours and tours[0].tour:
+            first_tour = tours[0]
             return {
                 'id': str(first_tour.tour.id),
                 'name': first_tour.tour.name,
@@ -109,8 +121,8 @@ class CommissionSerializer(serializers.ModelSerializer):
         return None
 
     def get_passengers(self, obj):
-        """Calculate total passengers from all booking tours"""
-        tours = obj.booking.booking_tours.all()
+        """Calculate total passengers from all booking tours - uses cached prefetch data"""
+        tours = self._get_booking_tours(obj)
         adults = sum(tour.adult_pax for tour in tours)
         children = sum(tour.child_pax for tour in tours)
         infants = sum(tour.infant_pax for tour in tours)
@@ -155,13 +167,14 @@ class CommissionSerializer(serializers.ModelSerializer):
         return obj.booking.status if obj.booking else None
 
     def get_payment_status(self, obj):
-        """Get payment status from booking payments"""
+        """Get payment status from booking payments - uses prefetched data"""
         if not obj.booking:
             return 'unknown'
-        payments = obj.booking.payment_details.all()
-        if not payments.exists():
+        # Use prefetched payment_details
+        payments = list(obj.booking.payment_details.all())
+        if not payments:
             return 'pending'
-        total_paid = sum(p.amount for p in payments if p.status == 'confirmed')
+        total_paid = sum(p.amount_paid for p in payments if p.status == 'paid')
         if total_paid >= obj.gross_total:
             return 'paid'
         elif total_paid > 0:

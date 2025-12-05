@@ -152,7 +152,13 @@ def financial_dashboard(request):
     - Commissions
     - Financial accounts
     - Cash flow analysis
+
+    OPTIMIZED: Uses aggregated queries with conditional expressions to minimize DB calls.
+    Reduced from 30+ queries to ~10 queries.
     """
+    from django.db.models import Case, When, Value, DecimalField
+    from django.db.models.functions import Coalesce, TruncMonth
+
     # Get date range from query params
     start_date_str = request.query_params.get('startDate')
     end_date_str = request.query_params.get('endDate')
@@ -170,34 +176,36 @@ def financial_dashboard(request):
     # Convert dates to timezone-aware datetimes for querying DateTimeFields
     start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
     end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+    today = timezone.now().date()
 
-    # ========== INCOME/REVENUE (from Bookings and Payments) ==========
+    # ========== INCOME/REVENUE - OPTIMIZED (single aggregate query) ==========
 
-    # Get all payments in date range
+    # Base payments query
     payments = BookingPayment.objects.filter(
         date__range=[start_datetime, end_datetime]
     )
 
     # Filter by currency if specified
     if currency_filter and currency_filter != 'ALL':
-        # Get bookings with matching currency
-        booking_ids = Booking.objects.filter(currency=currency_filter).values_list('id', flat=True)
-        payments = payments.filter(booking_id__in=booking_ids)
+        payments = payments.filter(booking__currency=currency_filter)
 
-    # Total revenue from payments
-    total_revenue = payments.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+    # Single query for all revenue metrics
+    revenue_metrics = payments.aggregate(
+        total=Coalesce(Sum('amount_paid'), Value(Decimal('0'))),
+        pending=Coalesce(Sum('amount_paid', filter=Q(status='pending')), Value(Decimal('0'))),
+        paid=Coalesce(Sum('amount_paid', filter=Q(status='paid')), Value(Decimal('0')))
+    )
+    total_revenue = revenue_metrics['total']
+    pending_revenue = revenue_metrics['pending']
+    paid_revenue = revenue_metrics['paid']
 
-    # Revenue by status
-    pending_revenue = payments.filter(status='pending').aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
-    paid_revenue = payments.filter(status='paid').aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
-
-    # Revenue by payment method
+    # Revenue by payment method (single query)
     revenue_by_method = payments.values('method').annotate(
         total=Sum('amount_paid'),
         count=Count('id')
     ).order_by('-total')
 
-    # ========== EXPENSES ==========
+    # ========== EXPENSES - OPTIMIZED (single aggregate query) ==========
 
     expenses = Expense.objects.filter(
         due_date__range=[start_date, end_date]
@@ -206,31 +214,35 @@ def financial_dashboard(request):
     if currency_filter and currency_filter != 'ALL':
         expenses = expenses.filter(currency=currency_filter)
 
-    # Total expenses
-    total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+    # Single query for all expense metrics
+    expense_metrics = expenses.aggregate(
+        total=Coalesce(Sum('amount'), Value(Decimal('0'))),
+        fixed=Coalesce(Sum('amount', filter=Q(expense_type='fixed')), Value(Decimal('0'))),
+        variable=Coalesce(Sum('amount', filter=Q(expense_type='variable')), Value(Decimal('0'))),
+        fc=Coalesce(Sum('amount', filter=Q(cost_type='fc')), Value(Decimal('0'))),
+        ivc=Coalesce(Sum('amount', filter=Q(cost_type='ivc')), Value(Decimal('0'))),
+        dvc=Coalesce(Sum('amount', filter=Q(cost_type='dvc')), Value(Decimal('0'))),
+        paid=Coalesce(Sum('amount', filter=Q(payment_date__isnull=False)), Value(Decimal('0'))),
+        overdue=Coalesce(Sum('amount', filter=Q(payment_date__isnull=True, due_date__lt=today)), Value(Decimal('0'))),
+        pending=Coalesce(Sum('amount', filter=Q(payment_date__isnull=True, due_date__gte=today)), Value(Decimal('0')))
+    )
+    total_expenses = expense_metrics['total']
+    fixed_expenses_total = expense_metrics['fixed']
+    variable_expenses_total = expense_metrics['variable']
+    fc_expenses_total = expense_metrics['fc']
+    ivc_expenses_total = expense_metrics['ivc']
+    dvc_expenses_total = expense_metrics['dvc']
+    paid_expenses = expense_metrics['paid']
+    overdue_expenses = expense_metrics['overdue']
+    pending_expenses = expense_metrics['pending']
 
-    # Expenses by type
-    fixed_expenses_total = expenses.filter(expense_type='fixed').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    variable_expenses_total = expenses.filter(expense_type='variable').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-
-    # Expenses by cost type (FC, IVC, DVC)
-    fc_expenses_total = expenses.filter(cost_type='fc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    ivc_expenses_total = expenses.filter(cost_type='ivc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    dvc_expenses_total = expenses.filter(cost_type='dvc').aggregate(total=Sum('amount'))['total'] or Decimal('0')
-
-    # Expenses by status (derived from payment_date and due_date)
-    today = timezone.now().date()
-    paid_expenses = expenses.filter(payment_date__isnull=False).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    overdue_expenses = expenses.filter(payment_date__isnull=True, due_date__lt=today).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-    pending_expenses = expenses.filter(payment_date__isnull=True, due_date__gte=today).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-
-    # Expenses by category
+    # Expenses by category (single query)
     expenses_by_category = expenses.values('category').annotate(
         total=Sum('amount'),
         count=Count('id')
     ).order_by('-total')
 
-    # ========== COMMISSIONS ==========
+    # ========== COMMISSIONS - OPTIMIZED (single aggregate query) ==========
 
     commissions = Commission.objects.filter(
         created_at__range=[start_datetime, end_datetime]
@@ -239,26 +251,25 @@ def financial_dashboard(request):
     if currency_filter and currency_filter != 'ALL':
         commissions = commissions.filter(currency=currency_filter)
 
-    # Total commissions
-    total_commissions = commissions.aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
+    # Single query for all commission metrics
+    commission_metrics = commissions.aggregate(
+        total=Coalesce(Sum('commission_amount'), Value(Decimal('0'))),
+        pending=Coalesce(Sum('commission_amount', filter=Q(status='pending')), Value(Decimal('0'))),
+        paid=Coalesce(Sum('commission_amount', filter=Q(status='paid')), Value(Decimal('0')))
+    )
+    total_commissions = commission_metrics['total']
+    pending_commissions = commission_metrics['pending']
+    paid_commissions = commission_metrics['paid']
 
-    # Commissions by status
-    pending_commissions = commissions.filter(status='pending').aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
-    paid_commissions = commissions.filter(status='paid').aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
+    # ========== FINANCIAL ACCOUNTS - OPTIMIZED ==========
+    # Get payment accounts from settings_app
+    payment_accounts = list(PaymentAccount.objects.all())
 
-    # ========== FINANCIAL ACCOUNTS ==========
-    # Get payment accounts from settings_app instead of financial app
-    payment_accounts = PaymentAccount.objects.all()
-
-    # Calculate balance for each account based on transactions
-    accounts_data = []
-    total_balance = Decimal('0')
-
-    # Load exchange rates from database
-    # Build a dictionary for quick lookup: {(from_currency, to_currency): rate}
-    db_exchange_rates = {}
-    for rate in ExchangeRate.objects.all():
-        db_exchange_rates[(rate.from_currency, rate.to_currency)] = rate.rate
+    # Load exchange rates from database once
+    db_exchange_rates = {
+        (rate.from_currency, rate.to_currency): rate.rate
+        for rate in ExchangeRate.objects.all()
+    }
 
     # Fallback to hardcoded rates if database is empty
     default_exchange_rates = {
@@ -273,111 +284,119 @@ def financial_dashboard(request):
         """Get exchange rate from database or fallback to defaults"""
         if from_curr == to_curr:
             return Decimal('1.00')
-
-        # Try database first
         if (from_curr, to_curr) in db_exchange_rates:
             return db_exchange_rates[(from_curr, to_curr)]
-
-        # Fallback: convert through USD
         if from_curr in default_exchange_rates and to_curr in default_exchange_rates:
-            # Convert from_curr to USD, then USD to to_curr
             from_to_usd = Decimal('1.00') / default_exchange_rates[from_curr]
             usd_to_target = default_exchange_rates[to_curr]
             return from_to_usd * usd_to_target
+        return Decimal('1.00')
 
-        return Decimal('1.00')  # Default to 1:1 if no rate found
+    # Pre-fetch all paid payment totals grouped by method (single query)
+    paid_payments_by_method = {
+        item['method'].lower(): item['total']
+        for item in BookingPayment.objects.filter(status='paid').values('method').annotate(
+            total=Sum('amount_paid')
+        )
+    }
+
+    accounts_data = []
+    total_balance = Decimal('0')
 
     for payment_account in payment_accounts:
         account_name = payment_account.accountName
         account_currency = payment_account.currency
+        method_key = account_name.replace('.', '').replace(' ', '-').lower()
 
-        # Calculate incoming payments (revenue) for this account
-        # Match by payment method containing account name (case-insensitive)
-        # The account name should match the payment method choices (e.g., "Pagar.me" matches "pagarme-brl")
-        incoming_payments = BookingPayment.objects.filter(
-            status='paid',
-            method__icontains=account_name.replace('.', '').replace(' ', '-').lower()
-        ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
-
-        # For outgoing expenses, we no longer have payment_method field
-        # So just use the current_balance from incoming payments
-        current_balance = incoming_payments
+        # Find matching payment method from pre-fetched data
+        current_balance = Decimal('0')
+        for method, total in paid_payments_by_method.items():
+            if method_key in method:
+                current_balance = total or Decimal('0')
+                break
 
         # Convert balance to selected currency if needed
-        converted_balance = None
         if account_currency == currency_filter:
             converted_balance = current_balance
             total_balance += current_balance
         else:
-            # Convert using exchange rate
             exchange_rate = get_exchange_rate(account_currency, currency_filter)
-            converted_amount = current_balance * exchange_rate
-            converted_balance = converted_amount
-            total_balance += converted_amount
+            converted_balance = current_balance * exchange_rate
+            total_balance += converted_balance
 
-        # Build account data structure matching frontend expectations
         accounts_data.append({
             'id': str(payment_account.id),
             'name': account_name,
-            'bank_name': account_name.split(' ')[0] if ' ' in account_name else account_name,  # Extract bank name
-            'account_type': 'checking',  # Default type since PaymentAccount doesn't have this field
+            'bank_name': account_name.split(' ')[0] if ' ' in account_name else account_name,
+            'account_type': 'checking',
             'currency': account_currency,
             'current_balance': float(current_balance),
-            'converted_balance': float(converted_balance) if converted_balance is not None else None,
+            'converted_balance': float(converted_balance),
             'is_active': True
         })
 
     # ========== CASH FLOW ==========
-
-    # Calculate net position
     net_income = total_revenue - total_expenses - total_commissions
-
-    # Calculate receivables (pending payments)
     total_receivables = pending_revenue
-
-    # Calculate payables (pending expenses)
     total_payables = pending_expenses + pending_commissions
-
-    # Cash position
     cash_position = total_balance + total_receivables - total_payables
 
-    # ========== MONTHLY BREAKDOWN ==========
-
-    # Get last 6 months data for trends
+    # ========== MONTHLY BREAKDOWN - OPTIMIZED (3 queries instead of 18) ==========
     six_months_ago = end_date - timedelta(days=180)
+    six_months_start = six_months_ago.replace(day=1)
+    six_months_start_dt = timezone.make_aware(datetime.combine(six_months_start, datetime.min.time()))
 
+    # Single query for monthly revenue
+    monthly_revenue = {
+        item['month'].strftime('%Y-%m'): item['total'] or Decimal('0')
+        for item in BookingPayment.objects.filter(
+            date__gte=six_months_start_dt,
+            date__lte=end_datetime
+        ).annotate(
+            month=TruncMonth('date')
+        ).values('month').annotate(
+            total=Sum('amount_paid')
+        )
+    }
+
+    # Single query for monthly expenses
+    monthly_expenses_data = {
+        item['month'].strftime('%Y-%m'): item['total'] or Decimal('0')
+        for item in Expense.objects.filter(
+            due_date__gte=six_months_start,
+            due_date__lte=end_date
+        ).annotate(
+            month=TruncMonth('due_date')
+        ).values('month').annotate(
+            total=Sum('amount')
+        )
+    }
+
+    # Single query for monthly commissions
+    monthly_commissions_data = {
+        item['month'].strftime('%Y-%m'): item['total'] or Decimal('0')
+        for item in Commission.objects.filter(
+            created_at__gte=six_months_start_dt,
+            created_at__lte=end_datetime
+        ).annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(
+            total=Sum('commission_amount')
+        )
+    }
+
+    # Build monthly data from pre-aggregated results
     monthly_data = []
-    current_date = six_months_ago
+    current_date = six_months_start
 
     while current_date <= end_date:
-        month_start = current_date.replace(day=1)
-        # Get last day of month
-        if month_start.month == 12:
-            month_end = month_start.replace(year=month_start.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            month_end = month_start.replace(month=month_start.month + 1, day=1) - timedelta(days=1)
-
-        # Convert month dates to timezone-aware datetimes
-        month_start_dt = timezone.make_aware(datetime.combine(month_start, datetime.min.time()))
-        month_end_dt = timezone.make_aware(datetime.combine(month_end, datetime.max.time()))
-
-        # Revenue for this month
-        month_revenue = BookingPayment.objects.filter(
-            date__range=[month_start_dt, month_end_dt]
-        ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
-
-        # Expenses for this month
-        month_expenses = Expense.objects.filter(
-            due_date__range=[month_start, month_end]
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-
-        # Commissions for this month
-        month_commissions = Commission.objects.filter(
-            created_at__range=[month_start_dt, month_end_dt]
-        ).aggregate(total=Sum('commission_amount'))['total'] or Decimal('0')
+        month_key = current_date.strftime('%Y-%m')
+        month_revenue = monthly_revenue.get(month_key, Decimal('0'))
+        month_expenses = monthly_expenses_data.get(month_key, Decimal('0'))
+        month_commissions = monthly_commissions_data.get(month_key, Decimal('0'))
 
         monthly_data.append({
-            'month': month_start.strftime('%Y-%m'),
+            'month': month_key,
             'revenue': float(month_revenue),
             'expenses': float(month_expenses),
             'commissions': float(month_commissions),
@@ -513,64 +532,79 @@ def receivables_list(request):
 def payables_list(request):
     """
     Get all payables (pending expenses and commissions)
+
+    OPTIMIZED: Uses .values() to reduce memory and avoid N+1 queries
     """
     today = timezone.now().date()
-
-    # Get all expenses (we'll calculate derived status)
-    expenses = Expense.objects.select_related('person', 'payment_account').all()
-
-    # Get pending commissions
-    commissions = Commission.objects.filter(
-        status__in=['pending', 'approved']
-    )
 
     # Filter by date range if provided
     start_date = request.query_params.get('startDate')
     end_date = request.query_params.get('endDate')
 
+    # Get expenses with optimized query using .values() for specific fields
+    expenses_qs = Expense.objects.select_related('person', 'payment_account')
+
     if start_date and end_date:
-        expenses = expenses.filter(due_date__range=[start_date, end_date])
+        expenses_qs = expenses_qs.filter(due_date__range=[start_date, end_date])
 
-    # Build response data
-    data = {
-        'expenses': [],
-        'commissions': []
-    }
+    # Use .values() to get only needed fields in a single query
+    expenses_data = expenses_qs.values(
+        'id', 'amount', 'currency', 'due_date', 'payment_date',
+        'category', 'expense_type',
+        'person__full_name',
+        'payment_account__id', 'payment_account__accountName'
+    )
 
-    for expense in expenses:
+    # Get pending commissions with optimized query
+    commissions_data = Commission.objects.filter(
+        status__in=['pending', 'approved']
+    ).select_related('booking', 'salesperson').values(
+        'id', 'commission_amount', 'currency', 'status', 'commission_percentage',
+        'external_agency',
+        'booking__id',
+        'salesperson__username'
+    )
+
+    # Build response data efficiently
+    expenses_list = []
+    for exp in expenses_data:
         # Derive payment status from payment_date and due_date
-        if expense.payment_date:
+        if exp['payment_date']:
             status = 'paid'
-        elif expense.due_date and expense.due_date < today:
+        elif exp['due_date'] and exp['due_date'] < today:
             status = 'overdue'
         else:
             status = 'pending'
 
-        data['expenses'].append({
-            'id': str(expense.id),
-            'person_name': expense.person.full_name if expense.person else None,
-            'amount': float(expense.amount),
-            'currency': expense.currency,
-            'dueDate': expense.due_date.strftime('%Y-%m-%d') if expense.due_date else None,
+        expenses_list.append({
+            'id': str(exp['id']),
+            'person_name': exp['person__full_name'],
+            'amount': float(exp['amount']),
+            'currency': exp['currency'],
+            'dueDate': exp['due_date'].strftime('%Y-%m-%d') if exp['due_date'] else None,
             'status': status,
-            'category': expense.category,
-            'expenseType': expense.expense_type,
-            'payment_account_id': str(expense.payment_account.id) if expense.payment_account else None,
-            'payment_account_name': expense.payment_account.accountName if expense.payment_account else None,
+            'category': exp['category'],
+            'expenseType': exp['expense_type'],
+            'payment_account_id': str(exp['payment_account__id']) if exp['payment_account__id'] else None,
+            'payment_account_name': exp['payment_account__accountName'],
         })
 
-    for commission in commissions:
-        data['commissions'].append({
-            'id': str(commission.id),
-            'bookingId': str(commission.booking.id) if commission.booking else None,
-            'salesperson': commission.salesperson.username if commission.salesperson else commission.external_agency,
-            'amount': float(commission.commission_amount),
-            'currency': commission.currency,
-            'status': commission.status,
-            'percentage': float(commission.commission_percentage)
+    commissions_list = []
+    for comm in commissions_data:
+        commissions_list.append({
+            'id': str(comm['id']),
+            'bookingId': str(comm['booking__id']) if comm['booking__id'] else None,
+            'salesperson': comm['salesperson__username'] if comm['salesperson__username'] else comm['external_agency'],
+            'amount': float(comm['commission_amount']),
+            'currency': comm['currency'],
+            'status': comm['status'],
+            'percentage': float(comm['commission_percentage'])
         })
 
-    return Response(data)
+    return Response({
+        'expenses': expenses_list,
+        'commissions': commissions_list
+    })
 
 
 class BankTransferViewSet(viewsets.ModelViewSet):
