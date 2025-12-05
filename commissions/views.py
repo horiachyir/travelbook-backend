@@ -421,7 +421,8 @@ def close_commissions(request):
             return Response({'error': 'Recipient name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Only admins can make adjustments (edit commission values)
-        if adjustments and not request.user.is_staff:
+        is_admin = request.user.is_staff or request.user.is_superuser or request.user.role == 'administrator'
+        if adjustments and not is_admin:
             return Response(
                 {'error': 'Only administrators can modify commission values'},
                 status=status.HTTP_403_FORBIDDEN
@@ -577,7 +578,8 @@ def close_operator_payments(request):
             return Response({'error': 'Operator name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Only admins can make adjustments (edit payment values)
-        if adjustments and not request.user.is_staff:
+        is_admin = request.user.is_staff or request.user.is_superuser or request.user.role == 'administrator'
+        if adjustments and not is_admin:
             return Response(
                 {'error': 'Only administrators can modify payment values'},
                 status=status.HTTP_403_FORBIDDEN
