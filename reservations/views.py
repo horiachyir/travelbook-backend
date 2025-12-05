@@ -1639,10 +1639,11 @@ def get_dashboard_data(request):
     OPTIMIZED: Uses aggregated queries instead of loops to reduce DB calls from 60+ to ~10
     """
     try:
-        from django.db.models import Sum, Count, Q, F, Value, IntegerField
+        from django.db.models import Sum, Count, Q, F, Value, IntegerField, DecimalField
         from django.db.models.functions import ExtractYear, ExtractMonth, Coalesce
         from django.utils import timezone
         from datetime import datetime, timedelta
+        from decimal import Decimal
         from customers.models import Customer
 
         current_year = timezone.now().year
@@ -1693,12 +1694,12 @@ def get_dashboard_data(request):
 
         # Single query for all revenue metrics
         revenue_metrics = BookingPayment.objects.filter(status='paid').aggregate(
-            total_revenue=Coalesce(Sum('amount_paid'), Value(0)),
-            last_year_revenue=Coalesce(Sum('amount_paid', filter=Q(created_at__year=last_year)), Value(0)),
-            current_year_revenue=Coalesce(Sum('amount_paid', filter=Q(created_at__year=current_year)), Value(0))
+            total_revenue=Coalesce(Sum('amount_paid'), Value(Decimal('0')), output_field=DecimalField()),
+            last_year_revenue=Coalesce(Sum('amount_paid', filter=Q(created_at__year=last_year)), Value(Decimal('0')), output_field=DecimalField()),
+            current_year_revenue=Coalesce(Sum('amount_paid', filter=Q(created_at__year=current_year)), Value(Decimal('0')), output_field=DecimalField())
         )
         total_revenue = revenue_metrics['total_revenue']
-        last_year_revenue = revenue_metrics['last_year_revenue'] or 1
+        last_year_revenue = revenue_metrics['last_year_revenue'] or Decimal('1')
 
         # Single query for reservation counts
         reservation_counts = Booking.objects.aggregate(
@@ -1722,21 +1723,15 @@ def get_dashboard_data(request):
 
         # Single query for PAX metrics
         pax_metrics = BookingTour.objects.aggregate(
-            current_year=Coalesce(
-                Sum('adult_pax', filter=Q(booking__created_at__year=current_year)) +
-                Sum('child_pax', filter=Q(booking__created_at__year=current_year)) +
-                Sum('infant_pax', filter=Q(booking__created_at__year=current_year)),
-                Value(0)
-            ),
-            last_year=Coalesce(
-                Sum('adult_pax', filter=Q(booking__created_at__year=last_year)) +
-                Sum('child_pax', filter=Q(booking__created_at__year=last_year)) +
-                Sum('infant_pax', filter=Q(booking__created_at__year=last_year)),
-                Value(0)
-            )
+            current_year_adults=Coalesce(Sum('adult_pax', filter=Q(booking__created_at__year=current_year)), Value(0), output_field=IntegerField()),
+            current_year_children=Coalesce(Sum('child_pax', filter=Q(booking__created_at__year=current_year)), Value(0), output_field=IntegerField()),
+            current_year_infants=Coalesce(Sum('infant_pax', filter=Q(booking__created_at__year=current_year)), Value(0), output_field=IntegerField()),
+            last_year_adults=Coalesce(Sum('adult_pax', filter=Q(booking__created_at__year=last_year)), Value(0), output_field=IntegerField()),
+            last_year_children=Coalesce(Sum('child_pax', filter=Q(booking__created_at__year=last_year)), Value(0), output_field=IntegerField()),
+            last_year_infants=Coalesce(Sum('infant_pax', filter=Q(booking__created_at__year=last_year)), Value(0), output_field=IntegerField()),
         )
-        current_year_pax = pax_metrics['current_year'] or 0
-        last_year_pax = pax_metrics['last_year'] or 1
+        current_year_pax = (pax_metrics['current_year_adults'] + pax_metrics['current_year_children'] + pax_metrics['current_year_infants']) or 0
+        last_year_pax = (pax_metrics['last_year_adults'] + pax_metrics['last_year_children'] + pax_metrics['last_year_infants']) or 1
 
         # Calculate changes
         revenue_change = ((total_revenue - last_year_revenue) / last_year_revenue * 100) if last_year_revenue > 0 else 0
@@ -1815,12 +1810,12 @@ def get_dashboard_data(request):
         ).annotate(
             month=ExtractMonth('booking__created_at')
         ).values('month').annotate(
-            total_pax=Coalesce(Sum('adult_pax'), Value(0)) +
-                      Coalesce(Sum('child_pax'), Value(0)) +
-                      Coalesce(Sum('infant_pax'), Value(0))
+            adults=Coalesce(Sum('adult_pax'), Value(0), output_field=IntegerField()),
+            children=Coalesce(Sum('child_pax'), Value(0), output_field=IntegerField()),
+            infants=Coalesce(Sum('infant_pax'), Value(0), output_field=IntegerField())
         ).order_by('month')
 
-        pax_lookup = {item['month']: item['total_pax'] or 0 for item in monthly_pax_data}
+        pax_lookup = {item['month']: (item['adults'] + item['children'] + item['infants']) for item in monthly_pax_data}
 
         # Build monthly reservations response
         monthly_reservations = []
@@ -1837,10 +1832,10 @@ def get_dashboard_data(request):
         ).prefetch_related(
             'booking_tours__tour'
         ).annotate(
-            total_pax=Coalesce(Sum('booking_tours__adult_pax'), Value(0)) +
-                      Coalesce(Sum('booking_tours__child_pax'), Value(0)) +
-                      Coalesce(Sum('booking_tours__infant_pax'), Value(0)),
-            total_amount=Coalesce(Sum('booking_tours__subtotal'), Value(0))
+            _adults=Coalesce(Sum('booking_tours__adult_pax'), Value(0), output_field=IntegerField()),
+            _children=Coalesce(Sum('booking_tours__child_pax'), Value(0), output_field=IntegerField()),
+            _infants=Coalesce(Sum('booking_tours__infant_pax'), Value(0), output_field=IntegerField()),
+            total_amount=Coalesce(Sum('booking_tours__subtotal'), Value(Decimal('0')), output_field=DecimalField())
         ).order_by('-created_at')[:4]
 
         recent_reservations = []
@@ -1856,7 +1851,7 @@ def get_dashboard_data(request):
                     'date': first_tour.date.strftime('%Y-%m-%d') if first_tour.date else '',
                     'status': booking.status,
                     'amount': f'${float(booking.total_amount):,.2f}',
-                    'pax': booking.total_pax
+                    'pax': booking._adults + booking._children + booking._infants
                 })
 
         # ===== RETURN RESPONSE =====
